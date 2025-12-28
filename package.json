@@ -1,0 +1,31 @@
+{
+  "name": "pi-chrome-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pi-chrome": "./bin/pi-chrome"
+  },
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "install:native": "node scripts/install-native-host.cjs",
+    "uninstall:native": "node scripts/uninstall-native-host.cjs"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.30.2",
+    "@mariozechner/pi-web-ui": "^0.30.2",
+    "@sinclair/typebox": "^0.34.41",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "events": "^3.3.0",
+    "stream-browserify": "^3.0.0",
+    "vite-plugin-node-polyfills": "^0.24.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  }
+}
