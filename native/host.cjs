@@ -375,10 +375,27 @@ function mapToolToMessage(tool, args, tabId) {
       return { type: "LIST_TABS" };
     case "tab.new":
       return { type: "NEW_TAB", url: a.url, urls: a.urls };
-    case "tab.switch":
-      return { type: "SWITCH_TAB", tabId: a.id || a.tab_id || a.tabId };
-    case "tab.close":
-      return { type: "CLOSE_TAB", tabId: a.id || a.tab_id || a.tabId, tabIds: a.ids || a.tab_ids || a.tabIds };
+    case "tab.switch": {
+      const id = a.id || a.tab_id || a.tabId;
+      if (typeof id === "string" && !/^\d+$/.test(id)) {
+        return { type: "NAMED_TAB_SWITCH", name: id };
+      }
+      return { type: "SWITCH_TAB", tabId: id };
+    }
+    case "tab.close": {
+      const id = a.id || a.tab_id || a.tabId;
+      const ids = a.ids || a.tab_ids || a.tabIds;
+      if (typeof id === "string" && !/^\d+$/.test(id)) {
+        return { type: "NAMED_TAB_CLOSE", name: id };
+      }
+      return { type: "CLOSE_TAB", tabId: id, tabIds: ids };
+    }
+    case "tab.name":
+      return { type: "TABS_REGISTER", name: a.name, ...baseMsg };
+    case "tab.unname":
+      return { type: "TABS_UNREGISTER", name: a.name };
+    case "tab.named":
+      return { type: "TABS_LIST_NAMED" };
     case "js":
       return { type: "EXECUTE_JAVASCRIPT", code: a.code, ...baseMsg };
     case "scroll.top":
@@ -564,6 +581,28 @@ function handleToolRequest(msg, socket) {
       writeMessage({ type: "EXECUTE_KEY", key, tabId: tid, id });
     };
     sendNextKey();
+    return;
+  }
+  
+  if (extensionMsg.type === "NAMED_TAB_SWITCH" || extensionMsg.type === "NAMED_TAB_CLOSE") {
+    const { name, type: opType } = extensionMsg;
+    const lookupId = ++requestCounter;
+    pendingToolRequests.set(lookupId, {
+      socket: null,
+      originalId: null,
+      tool: "tabs_get_by_name",
+      onComplete: (result) => {
+        if (result.error || !result.tabId) {
+          sendToolResponse(socket, originalId, null, result.error || `No tab found with name "${name}"`);
+          return;
+        }
+        const actionId = ++requestCounter;
+        const actionType = opType === "NAMED_TAB_SWITCH" ? "SWITCH_TAB" : "CLOSE_TAB";
+        pendingToolRequests.set(actionId, { socket, originalId, tool, tabId: result.tabId });
+        writeMessage({ type: actionType, tabId: result.tabId, id: actionId });
+      }
+    });
+    writeMessage({ type: "TABS_GET_BY_NAME", name, id: lookupId });
     return;
   }
   

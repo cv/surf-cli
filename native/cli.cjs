@@ -11,8 +11,11 @@ const TOOLS = {
     commands: {
       "tab.list": { desc: "List all open tabs", args: [] },
       "tab.new": { desc: "Open new tab", args: ["url"], opts: { urls: "Open multiple URLs" } },
-      "tab.switch": { desc: "Switch to tab", args: ["id"] },
-      "tab.close": { desc: "Close tab", args: ["id"], opts: { ids: "Close multiple tabs" } },
+      "tab.switch": { desc: "Switch to tab by ID or name", args: ["id"] },
+      "tab.close": { desc: "Close tab by ID or name", args: ["id"], opts: { ids: "Close multiple tabs" } },
+      "tab.name": { desc: "Register current tab with a name", args: ["name"] },
+      "tab.unname": { desc: "Unregister a named tab", args: ["name"] },
+      "tab.named": { desc: "List all named tabs", args: [] },
     }
   },
   scroll: {
@@ -264,6 +267,8 @@ const PRIMARY_ARG_MAP = {
   "tab.switch": "id",
   close_tab: "tab_id",
   "tab.close": "id",
+  "tab.name": "name",
+  "tab.unname": "name",
   scroll_to_position: "position",
   type: "text",
   smart_type: "text",
@@ -410,6 +415,19 @@ function handleResponse(response) {
     if (Array.isArray(tabs)) {
       for (const t of tabs) {
         console.log(`${t.id}\t${t.title}\t${t.url}`);
+      }
+    } else {
+      console.log(JSON.stringify(data, null, 2));
+    }
+  } else if (tool === "tab.named" || tool === "tabs_list_named") {
+    const named = data?.tabs || data?.namedTabs || data || [];
+    if (Array.isArray(named)) {
+      if (named.length === 0) {
+        console.log("No named tabs");
+      } else {
+        for (const t of named) {
+          console.log(`${t.name}\t${t.tabId}\t${t.title || ""}\t${t.url || ""}`);
+        }
       }
     } else {
       console.log(JSON.stringify(data, null, 2));
