@@ -114,6 +114,7 @@ Config
 Options
   --tab-id <id>     Target specific tab
   --json            Output raw JSON response
+  --auto-capture    On error: capture screenshot + console to /tmp
   --list            List all 50+ socket tools
   --help, -h        Show this help
 
@@ -340,6 +341,9 @@ if (toolArgs["tab-id"] !== undefined) {
 const wantJson = toolArgs.json === true;
 delete toolArgs.json;
 
+const autoCapture = toolArgs["auto-capture"] === true;
+delete toolArgs["auto-capture"];
+
 const outputPath = toolArgs.output;
 delete toolArgs.output;
 
@@ -382,6 +386,78 @@ const request = {
   ...globalOpts,
 };
 
+const sendRequest = (toolName, toolArgs = {}) => {
+  return new Promise((resolve, reject) => {
+    const sock = net.createConnection(SOCKET_PATH, () => {
+      const req = {
+        type: "tool_request",
+        method: "execute_tool",
+        params: { tool: toolName, args: toolArgs },
+        id: "cli-" + Date.now() + "-" + Math.random(),
+        ...globalOpts,
+      };
+      sock.write(JSON.stringify(req) + "\n");
+    });
+    let buf = "";
+    sock.on("data", (d) => {
+      buf += d.toString();
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const resp = JSON.parse(line);
+          sock.end();
+          resolve(resp);
+        } catch {
+          sock.end();
+          reject(new Error("Invalid JSON"));
+        }
+      }
+    });
+    sock.on("error", (e) => reject(e));
+    let timeoutId;
+    timeoutId = setTimeout(() => { sock.destroy(); reject(new Error("Timeout")); }, 5000);
+    sock.on("close", () => clearTimeout(timeoutId));
+  });
+};
+
+const performAutoCapture = async () => {
+  const timestamp = Date.now();
+  const screenshotPath = `/tmp/pi-chrome-error-${timestamp}.png`;
+
+  try {
+    const [screenshotResp, consoleResp] = await Promise.all([
+      sendRequest("screenshot", { savePath: screenshotPath }),
+      sendRequest("read_console_messages", {}),
+    ]);
+
+    if (screenshotResp.result) {
+      console.error(`Auto-captured: ${screenshotPath}`);
+    } else {
+      console.error("Auto-captured: (screenshot failed)");
+    }
+
+    let consoleErrors = "(none)";
+    const consoleText = consoleResp.result?.content?.[0]?.text;
+    if (consoleText) {
+      try {
+        const parsed = JSON.parse(consoleText);
+        const msgs = parsed.messages || parsed || [];
+        const errors = msgs.filter(m => m.level === "error" || m.type === "error");
+        if (errors.length > 0) {
+          consoleErrors = errors.map(e => e.text || e.message || JSON.stringify(e)).join("\n  ");
+        }
+      } catch {
+        consoleErrors = consoleText;
+      }
+    }
+    console.error(`Console errors: ${consoleErrors}`);
+  } catch (captureErr) {
+    console.error(`Auto-capture failed: ${captureErr.message}`);
+  }
+};
+
 const socket = net.createConnection(SOCKET_PATH, () => {
   socket.write(JSON.stringify(request) + "\n");
 });
@@ -402,7 +478,10 @@ socket.on("data", (data) => {
   for (const line of lines) {
     if (!line.trim()) continue;
     try {
-      handleResponse(JSON.parse(line));
+      handleResponse(JSON.parse(line)).catch((err) => {
+        console.error("Handler error:", err.message);
+        process.exit(1);
+      });
     } catch (e) {
       console.error("Invalid JSON response:", line);
       process.exit(1);
@@ -426,12 +505,17 @@ socket.on("close", () => {
   clearTimeout(timeout);
 });
 
-function handleResponse(response) {
+async function handleResponse(response) {
   clearTimeout(timeout);
 
   if (response.error) {
     const errContent = response.error.content?.[0]?.text || JSON.stringify(response.error);
     console.error("Error:", errContent);
+
+    if (autoCapture) {
+      await performAutoCapture();
+    }
+
     socket.end();
     process.exit(1);
   }
@@ -494,6 +578,9 @@ function handleResponse(response) {
     console.log("OK");
   } else if (data?.error) {
     console.error("Error:", data.error);
+    if (autoCapture) {
+      await performAutoCapture();
+    }
     socket.end();
     process.exit(1);
   } else {
