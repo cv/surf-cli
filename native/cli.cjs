@@ -72,8 +72,8 @@ const TOOLS = {
   dev: {
     desc: "Dev tools",
     commands: {
-      "console": { desc: "Read console messages", args: [], opts: { clear: "Clear after reading" } },
-      "network": { desc: "Read network requests", args: [], opts: { clear: "Clear after reading" } },
+      "console": { desc: "Read console messages", args: [], opts: { clear: "Clear after reading", stream: "Continuous output", level: "Filter by level (log,warn,error)" } },
+      "network": { desc: "Read network requests", args: [], opts: { clear: "Clear after reading", stream: "Continuous output", filter: "Filter by URL pattern" } },
     }
   },
   health: {
@@ -534,6 +534,15 @@ if (tool === "screenshot" && outputPath) {
 const methodFlag = toolArgs.method;
 delete toolArgs.method;
 
+const streamMode = toolArgs.stream === true;
+delete toolArgs.stream;
+
+const streamLevel = toolArgs.level;
+delete toolArgs.level;
+
+const streamFilter = toolArgs.filter;
+delete toolArgs.filter;
+
 let finalTool = tool;
 if (methodFlag === "js") {
   if (tool === "type") {
@@ -556,6 +565,96 @@ if (methodFlag === "js") {
   if (tool === "smart_type") {
     finalTool = "type";
   }
+}
+
+if (streamMode && (tool === "console" || tool === "network")) {
+  const streamType = tool === "console" ? "STREAM_CONSOLE" : "STREAM_NETWORK";
+  const streamOpts = {
+    level: streamLevel,
+    filter: streamFilter,
+  };
+
+  const formatTime = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 });
+  };
+
+  let connectionTimeout = null;
+  let receivedData = false;
+
+  const sock = net.createConnection(SOCKET_PATH, () => {
+    const req = {
+      type: "stream_request",
+      streamType,
+      options: streamOpts,
+      id: "cli-stream-" + Date.now(),
+      ...globalOpts,
+    };
+    sock.write(JSON.stringify(req) + "\n");
+    connectionTimeout = setTimeout(() => {
+      if (!receivedData) {
+        console.error("Error: Stream connection timeout (10s) - no data received");
+        sock.destroy();
+        process.exit(1);
+      }
+    }, 10000);
+  });
+
+  let buf = "";
+  sock.on("data", (d) => {
+    if (!receivedData) {
+      receivedData = true;
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
+    }
+    buf += d.toString();
+    const lines = buf.split("\n");
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.error) {
+          console.error("Error:", msg.error);
+          sock.end();
+          process.exit(1);
+        }
+        if (msg.type === "stream_started") {
+          continue;
+        }
+        if (msg.type === "console_event") {
+          const { level, text, timestamp } = msg;
+          if (streamLevel && level !== streamLevel) continue;
+          console.log(`[console] [${level}] ${formatTime(timestamp)} ${text}`);
+        } else if (msg.type === "network_event") {
+          const { method, url, status, duration } = msg;
+          if (streamFilter && !url.includes(streamFilter)) continue;
+          const statusStr = status !== undefined ? status : "...";
+          const durationStr = duration !== undefined ? ` (${duration}ms)` : "";
+          console.log(`[network] ${method} ${url} ${statusStr}${durationStr}`);
+        }
+      } catch {}
+    }
+  });
+
+  sock.on("error", (e) => {
+    if (e.code === "ENOENT") {
+      console.error("Error: Socket not found. Is Chrome running with the extension?");
+    } else {
+      console.error("Error:", e.message);
+    }
+    process.exit(1);
+  });
+
+  process.on("SIGINT", () => {
+    sock.write(JSON.stringify({ type: "stream_stop" }) + "\n");
+    sock.end();
+    process.exit(0);
+  });
+
+  return;
 }
 
 const request = {

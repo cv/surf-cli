@@ -96,6 +96,7 @@ try {
 
 const pendingRequests = new Map();
 const pendingToolRequests = new Map();
+const activeStreams = new Map();
 let requestCounter = 0;
 
 function sendToolResponse(socket, id, result, error) {
@@ -320,6 +321,7 @@ function mapToolToMessage(tool, args, tabId) {
         timeout: a.timeout || 10000,
         ...baseMsg 
       };
+    case "console":
     case "read_console_messages":
       return { 
         type: "READ_CONSOLE_MESSAGES", 
@@ -329,6 +331,7 @@ function mapToolToMessage(tool, args, tabId) {
         clear: a.clear,
         ...baseMsg 
       };
+    case "network":
     case "read_network_requests":
       return { 
         type: "READ_NETWORK_REQUESTS", 
@@ -535,6 +538,31 @@ function mapComputerAction(args, tabId) {
   }
 }
 
+function handleStreamRequest(msg, socket) {
+  const { streamType, options, id: originalId } = msg;
+  const tabId = msg.tabId;
+  const streamId = ++requestCounter;
+  
+  activeStreams.set(streamId, {
+    socket,
+    originalId,
+    streamType,
+  });
+  
+  writeMessage({
+    type: streamType,
+    streamId,
+    options: options || {},
+    tabId,
+  });
+  
+  try {
+    socket.write(JSON.stringify({ type: "stream_started", streamId }) + "\n");
+  } catch (e) {
+    log(`Error sending stream_started: ${e.message}`);
+  }
+}
+
 function handleToolRequest(msg, socket) {
   const { method, params } = msg;
   const originalId = msg.id || null;
@@ -685,6 +713,31 @@ function processInput() {
       
       if (msg.type === "API_REQUEST") {
         handleApiRequest(msg, writeMessage);
+        return;
+      }
+      
+      if (msg.type === "STREAM_EVENT") {
+        const stream = activeStreams.get(msg.streamId);
+        if (stream) {
+          try {
+            stream.socket.write(JSON.stringify(msg.event) + "\n");
+          } catch (e) {
+            log(`Error forwarding stream event: ${e.message}`);
+            activeStreams.delete(msg.streamId);
+            writeMessage({ type: "STREAM_STOP", streamId: msg.streamId });
+          }
+        }
+        return;
+      }
+      
+      if (msg.type === "STREAM_ERROR") {
+        const stream = activeStreams.get(msg.streamId);
+        if (stream) {
+          try {
+            stream.socket.write(JSON.stringify({ error: msg.error }) + "\n");
+          } catch (e) {}
+          activeStreams.delete(msg.streamId);
+        }
         return;
       }
       
@@ -865,6 +918,23 @@ const server = net.createServer((socket) => {
           continue;
         }
         
+        if (msg.type === "stream_request") {
+          log("Handling stream_request: " + msg.streamType);
+          handleStreamRequest(msg, socket);
+          continue;
+        }
+        
+        if (msg.type === "stream_stop") {
+          log("Handling stream_stop");
+          for (const [streamId, stream] of activeStreams.entries()) {
+            if (stream.socket === socket) {
+              writeMessage({ type: "STREAM_STOP", streamId });
+              activeStreams.delete(streamId);
+            }
+          }
+          continue;
+        }
+        
         const id = ++requestCounter;
         log(`Forwarding to extension: id=${id} type=${msg.type}`);
         pendingRequests.set(id, { socket });
@@ -890,6 +960,12 @@ const server = net.createServer((socket) => {
     for (const [id, pending] of pendingToolRequests.entries()) {
       if (pending.socket === socket && !pending.autoScreenshot) {
         pendingToolRequests.delete(id);
+      }
+    }
+    for (const [streamId, stream] of activeStreams.entries()) {
+      if (stream.socket === socket) {
+        writeMessage({ type: "STREAM_STOP", streamId });
+        activeStreams.delete(streamId);
       }
     }
   });

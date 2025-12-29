@@ -18,6 +18,15 @@ interface NetworkRequest {
   timestamp: number;
 }
 
+type ConsoleEventCallback = (event: ConsoleMessage) => void;
+type NetworkEventCallback = (event: {
+  method: string;
+  url: string;
+  status?: number;
+  duration?: number;
+  timestamp: number;
+}) => void;
+
 const MODIFIERS = {
   alt: 1,
   ctrl: 2,
@@ -71,6 +80,9 @@ export class CDPController {
   private targets = new Map<number, Debuggee>();
   private consoleMessages: Map<number, ConsoleMessage[]> = new Map();
   private networkRequests: Map<number, NetworkRequest[]> = new Map();
+  private consoleCallbacks: Map<number, Map<number, ConsoleEventCallback>> = new Map();
+  private networkCallbacks: Map<number, Map<number, NetworkEventCallback>> = new Map();
+  private networkRequestStartTimes: Map<string, number> = new Map();
   private static debuggerListenerRegistered = false;
 
   async attach(tabId: number): Promise<void> {
@@ -104,6 +116,8 @@ export class CDPController {
       this.targets.delete(tabId);
       this.consoleMessages.delete(tabId);
       this.networkRequests.delete(tabId);
+      this.consoleCallbacks.delete(tabId);
+      this.networkCallbacks.delete(tabId);
     }
   }
 
@@ -159,16 +173,24 @@ export class CDPController {
 
     const callFrame = params.stackTrace?.callFrames?.[0];
 
-    messages.push({
+    const msg: ConsoleMessage = {
       type: params.type || "log",
       text,
       timestamp: params.timestamp || Date.now(),
       url: callFrame?.url,
       line: callFrame?.lineNumber,
-    });
+    };
 
+    messages.push(msg);
     if (messages.length > 1000) messages.shift();
     this.consoleMessages.set(tabId, messages);
+
+    const callbacks = this.consoleCallbacks.get(tabId);
+    if (callbacks) {
+      for (const cb of callbacks.values()) {
+        cb(msg);
+      }
+    }
   }
 
   private handleRuntimeException(tabId: number, params: any): void {
@@ -176,16 +198,24 @@ export class CDPController {
     const details = params.exceptionDetails;
     if (!details) return;
 
-    messages.push({
+    const msg: ConsoleMessage = {
       type: "exception",
       text: details.exception?.description || details.text || "Unknown exception",
       timestamp: details.timestamp || Date.now(),
       url: details.url,
       line: details.lineNumber,
-    });
+    };
 
+    messages.push(msg);
     if (messages.length > 1000) messages.shift();
     this.consoleMessages.set(tabId, messages);
+
+    const callbacks = this.consoleCallbacks.get(tabId);
+    if (callbacks) {
+      for (const cb of callbacks.values()) {
+        cb(msg);
+      }
+    }
   }
 
   private handleNetworkRequest(tabId: number, params: any): void {
@@ -193,12 +223,15 @@ export class CDPController {
     const req = params.request;
     if (!req) return;
 
+    const timestamp = params.timestamp || Date.now();
+    this.networkRequestStartTimes.set(params.requestId, timestamp);
+
     requests.push({
       requestId: params.requestId,
       url: req.url,
       method: req.method,
       type: params.type,
-      timestamp: params.timestamp || Date.now(),
+      timestamp,
     });
 
     if (requests.length > 500) requests.shift();
@@ -210,6 +243,24 @@ export class CDPController {
     const existing = requests.find((r) => r.requestId === params.requestId);
     if (existing) {
       existing.status = params.response?.status;
+
+      const callbacks = this.networkCallbacks.get(tabId);
+      if (callbacks) {
+        const startTime = this.networkRequestStartTimes.get(params.requestId);
+        const now = Date.now();
+        const duration = startTime ? Math.round(now - startTime) : undefined;
+        this.networkRequestStartTimes.delete(params.requestId);
+
+        for (const cb of callbacks.values()) {
+          cb({
+            method: existing.method,
+            url: existing.url,
+            status: existing.status,
+            duration,
+            timestamp: now,
+          });
+        }
+      }
     }
   }
 
@@ -218,6 +269,24 @@ export class CDPController {
     const existing = requests.find((r) => r.requestId === params.requestId);
     if (existing && !existing.status) {
       existing.status = 0;
+
+      const callbacks = this.networkCallbacks.get(tabId);
+      if (callbacks) {
+        const startTime = this.networkRequestStartTimes.get(params.requestId);
+        const now = Date.now();
+        const duration = startTime ? Math.round(now - startTime) : undefined;
+        this.networkRequestStartTimes.delete(params.requestId);
+
+        for (const cb of callbacks.values()) {
+          cb({
+            method: existing.method,
+            url: existing.url,
+            status: 0,
+            duration,
+            timestamp: now,
+          });
+        }
+      }
     }
   }
 
@@ -288,6 +357,40 @@ export class CDPController {
 
   clearNetworkRequests(tabId: number): void {
     this.networkRequests.set(tabId, []);
+  }
+
+  subscribeToConsole(tabId: number, streamId: number, callback: ConsoleEventCallback): void {
+    if (!this.consoleCallbacks.has(tabId)) {
+      this.consoleCallbacks.set(tabId, new Map());
+    }
+    this.consoleCallbacks.get(tabId)!.set(streamId, callback);
+  }
+
+  unsubscribeFromConsole(tabId: number, streamId: number): void {
+    const callbacks = this.consoleCallbacks.get(tabId);
+    if (callbacks) {
+      callbacks.delete(streamId);
+      if (callbacks.size === 0) {
+        this.consoleCallbacks.delete(tabId);
+      }
+    }
+  }
+
+  subscribeToNetwork(tabId: number, streamId: number, callback: NetworkEventCallback): void {
+    if (!this.networkCallbacks.has(tabId)) {
+      this.networkCallbacks.set(tabId, new Map());
+    }
+    this.networkCallbacks.get(tabId)!.set(streamId, callback);
+  }
+
+  unsubscribeFromNetwork(tabId: number, streamId: number): void {
+    const callbacks = this.networkCallbacks.get(tabId);
+    if (callbacks) {
+      callbacks.delete(streamId);
+      if (callbacks.size === 0) {
+        this.networkCallbacks.delete(tabId);
+      }
+    }
   }
 
   async evaluateScript(tabId: number, expression: string): Promise<{

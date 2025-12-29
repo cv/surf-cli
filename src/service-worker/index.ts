@@ -1,10 +1,11 @@
 import { CDPController } from "../cdp/controller";
 import { debugLog } from "../utils/debug";
-import { initNativeMessaging } from "../native/port-manager";
+import { initNativeMessaging, postToNativeHost } from "../native/port-manager";
 
 debugLog("Service worker loaded");
 
 const cdp = new CDPController();
+const activeStreamTabs = new Map<number, number>();
 
 const screenshotCache = new Map<string, { base64: string; width: number; height: number }>();
 let screenshotCounter = 0;
@@ -102,6 +103,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   for (const [name, id] of tabNameRegistry) {
     if (id === tabId) {
       tabNameRegistry.delete(name);
+    }
+  }
+  for (const [streamId, streamTabId] of activeStreamTabs) {
+    if (streamTabId === tabId) {
+      activeStreamTabs.delete(streamId);
     }
   }
 });
@@ -1246,6 +1252,87 @@ async function handleMessage(
       } catch (err) {
         return { error: err instanceof Error ? err.message : "Unknown error" };
       }
+    }
+
+    case "STREAM_CONSOLE": {
+      if (!tabId) throw new Error("No tabId provided");
+      const streamId = message.streamId;
+
+      try {
+        await cdp.enableConsoleTracking(tabId);
+        activeStreamTabs.set(streamId, tabId);
+
+        cdp.subscribeToConsole(tabId, streamId, (event) => {
+          postToNativeHost({
+            type: "STREAM_EVENT",
+            streamId,
+            event: {
+              type: "console_event",
+              level: event.type === "exception" ? "error" : event.type,
+              text: event.text,
+              timestamp: event.timestamp,
+              url: event.url,
+              line: event.line,
+            },
+          });
+        });
+
+        return { success: true, streaming: true };
+      } catch (err) {
+        postToNativeHost({
+          type: "STREAM_ERROR",
+          streamId,
+          error: err instanceof Error ? err.message : "Failed to start console stream",
+        });
+        return { error: err instanceof Error ? err.message : "Failed to start console stream" };
+      }
+    }
+
+    case "STREAM_NETWORK": {
+      if (!tabId) throw new Error("No tabId provided");
+      const streamId = message.streamId;
+
+      try {
+        await cdp.enableNetworkTracking(tabId);
+        activeStreamTabs.set(streamId, tabId);
+
+        cdp.subscribeToNetwork(tabId, streamId, (event) => {
+          postToNativeHost({
+            type: "STREAM_EVENT",
+            streamId,
+            event: {
+              type: "network_event",
+              method: event.method,
+              url: event.url,
+              status: event.status,
+              duration: event.duration,
+              timestamp: event.timestamp,
+            },
+          });
+        });
+
+        return { success: true, streaming: true };
+      } catch (err) {
+        postToNativeHost({
+          type: "STREAM_ERROR",
+          streamId,
+          error: err instanceof Error ? err.message : "Failed to start network stream",
+        });
+        return { error: err instanceof Error ? err.message : "Failed to start network stream" };
+      }
+    }
+
+    case "STREAM_STOP": {
+      const streamId = message.streamId;
+      const streamTabId = activeStreamTabs.get(streamId);
+      
+      if (streamTabId !== undefined) {
+        cdp.unsubscribeFromConsole(streamTabId, streamId);
+        cdp.unsubscribeFromNetwork(streamTabId, streamId);
+        activeStreamTabs.delete(streamId);
+      }
+
+      return { success: true };
     }
 
     default:

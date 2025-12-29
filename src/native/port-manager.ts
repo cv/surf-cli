@@ -40,6 +40,12 @@ export function sendToNativeHost(msg: any): Promise<any> {
   });
 }
 
+export function postToNativeHost(msg: any): void {
+  if (nativePort) {
+    nativePort.postMessage(msg);
+  }
+}
+
 function connect(): void {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
