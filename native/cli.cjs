@@ -1257,6 +1257,16 @@ if (firstArg !== undefined) {
   }
 }
 
+if (tool === "js" && toolArgs.file) {
+  try {
+    toolArgs.code = fs.readFileSync(toolArgs.file, "utf8");
+    delete toolArgs.file;
+  } catch (e) {
+    console.error(`Error: Failed to read file: ${e.message}`);
+    process.exit(1);
+  }
+}
+
 if (toolArgs.into && !toolArgs.selector) {
   toolArgs.selector = toolArgs.into;
   delete toolArgs.into;
