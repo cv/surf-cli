@@ -1,19 +1,20 @@
-# Surf Native Messaging Host
+# Surf Native Host
 
-Native messaging host that bridges pi-coding-agent to the Chrome extension via Unix socket.
+Native messaging host that bridges CLI commands to the Chrome extension via Unix socket.
 
 ## Architecture
 
 ```
-Pi-Agent → Unix Socket (/tmp/surf.sock) → Native Host (host.cjs) → Chrome Native Messaging → Extension
+CLI (surf) → Unix Socket (/tmp/surf.sock) → Native Host → Chrome Extension → CDP
 ```
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `host.cjs` | Main native host with socket server and tool request handling |
-| `cli.cjs` | CLI tool for direct browser automation |
+| `host.cjs` | Main native host with socket server and tool handling |
+| `cli.cjs` | CLI tool for browser automation |
+| `chatgpt-client.cjs` | ChatGPT browser automation client |
 | `protocol.cjs` | Chrome native messaging protocol helpers |
 | `host-wrapper.py` | Python wrapper for native host execution |
 | `host.sh` | Shell script to start the host |
@@ -22,11 +23,16 @@ Pi-Agent → Unix Socket (/tmp/surf.sock) → Native Host (host.cjs) → Chrome 
 
 1. Install the native host manifest:
 ```bash
+npm run install:native <extension-id>
+```
+
+Or manually:
+```bash
 mkdir -p ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts
 cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.anthropic.pi_chrome.json << EOF
 {
   "name": "com.anthropic.pi_chrome",
-  "description": "Surf Extension Native Host",
+  "description": "Surf CLI Native Host",
   "path": "$PWD/host-wrapper.py",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://YOUR_EXTENSION_ID/"]
@@ -41,117 +47,29 @@ node host.cjs
 
 The host creates a Unix socket at `/tmp/surf.sock`.
 
-## CLI Usage
+## CLI Reference
+
+See the main [README](../README.md) for full CLI documentation.
+
+### Quick Reference
 
 ```bash
-surf <command> [args] [options]
+surf go "https://example.com"       # Navigate
+surf read                           # Get accessibility tree
+surf click e5                       # Click element
+surf type "hello" --submit          # Type and submit
+surf snap                           # Screenshot to /tmp
+surf chatgpt "explain this"         # Query ChatGPT
 ```
 
-### Common Commands
-
-| Command | Description |
-|---------|-------------|
-| `navigate <url>` | Go to URL (alias: `go`) |
-| `click <ref>` | Click element by ref or coordinates |
-| `type <text>` | Type text at cursor or into element |
-| `screenshot` | Capture screenshot (alias: `snap`) |
-| `page.read` | Get page accessibility tree (alias: `read`) |
-| `search <term>` | Search for text in page (alias: `find`) |
-
-### Navigation
+### Global Options
 
 ```bash
-surf go "https://example.com"
-surf back
-surf forward
-surf tab.reload --hard
-```
-
-### Page Interaction
-
-```bash
-surf read                           # Get interactive elements
-surf click e5                       # Click by element ref
-surf click --selector ".btn"        # Click by CSS selector
-surf click 100 200                  # Click by coordinates
-surf type "hello" --submit          # Type and press Enter
-surf key Escape                     # Press key
-```
-
-### Screenshots
-
-```bash
-surf screenshot --output /tmp/shot.png
-surf screenshot --annotate --output /tmp/labeled.png
-surf screenshot --fullpage --output /tmp/full.png
-surf snap                           # Auto-saves to /tmp
-```
-
-### Tabs
-
-```bash
-surf tab.list
-surf tab.new "https://example.com"
-surf tab.switch 123
-surf tab.close 123
-surf tab.group --name "Work" --color blue
-```
-
-### Cookies
-
-```bash
-surf cookie.list
-surf cookie.get --name "session"
-surf cookie.set --name "foo" --value "bar"
-surf cookie.clear --all
-```
-
-### Bookmarks & History
-
-```bash
-surf bookmark.add
-surf bookmark.list --limit 20
-surf history.list --limit 10
-surf history.search "github"
-```
-
-### ChatGPT Integration
-
-Query ChatGPT using your browser's logged-in session. No API keys required.
-
-```bash
-surf chatgpt "explain this code"
-surf chatgpt "summarize" --with-page     # Include page context
-surf chatgpt "analyze" --model gpt-4o    # Specify model
-surf chatgpt "long task" --timeout 60    # Custom timeout (seconds)
-```
-
-**Requirements:**
-- Logged into chatgpt.com in Chrome
-- Default timeout: 45 minutes
-
-**Gemini (Coming Soon):**
-```bash
-surf gemini "explain this"
-```
-
-### Other
-
-```bash
-surf zoom 1.5                       # Set zoom to 150%
-surf resize --width 1280 --height 720
-surf wait 2                         # Wait 2 seconds
-surf js "return document.title"     # Execute JavaScript
-```
-
-### Help
-
-```bash
-surf --help                         # Basic help
-surf --help-full                    # All commands
-surf <command> --help               # Command details
-surf --find <query>                 # Search commands
-surf --about refs                   # Topic guide
+--tab-id <id>     # Target specific tab
+--json            # Output raw JSON
+--soft-fail       # Warn instead of error on restricted pages
+--no-screenshot   # Skip auto-screenshot after actions
+--full            # Full resolution screenshots
 ```
 
 ## Protocol
@@ -218,5 +136,6 @@ surf --about refs                   # Topic guide
 |-------|----------|
 | Socket not found | Ensure `node host.cjs` is running |
 | No response | Check extension is loaded in Chrome |
-| "Content script not loaded" | Navigate to page first |
-| Slow first operation | Normal - CDP debugger attachment takes ~5s |
+| "Content script not loaded" | Navigate to a page first |
+| "Cannot control this page" | Page is restricted (chrome://, extensions) - use `--soft-fail` |
+| Slow first operation | Normal - CDP debugger attachment takes ~100-500ms |
