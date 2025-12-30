@@ -717,6 +717,7 @@ Options:
   --tab-id <id>     Target specific tab
   --json            Output raw JSON
   --auto-capture    On error: capture screenshot + console to /tmp
+  --soft-fail       On error: warn and exit 0 (for non-critical commands)
 
 Script Mode:
   surf --script <file>     Run workflow from JSON
@@ -1120,7 +1121,7 @@ if (args.includes("--script")) {
   return;
 }
 
-const BOOLEAN_FLAGS = ["auto-capture", "json", "stream", "dry-run", "stop-on-error", "fail-fast", "clear", "submit", "all", "case-sensitive", "hard", "annotate", "fullpage", "reset", "no-screenshot", "full"];
+const BOOLEAN_FLAGS = ["auto-capture", "json", "stream", "dry-run", "stop-on-error", "fail-fast", "clear", "submit", "all", "case-sensitive", "hard", "annotate", "fullpage", "reset", "no-screenshot", "full", "soft-fail"];
 
 const AUTO_SCREENSHOT_TOOLS = ["click", "type", "key", "smart_type", "form.fill", "form_input", "drag", "hover", "scroll", "scroll.top", "scroll.bottom", "scroll.to", "dialog.accept", "dialog.dismiss", "js", "eval"];
 
@@ -1274,6 +1275,9 @@ delete toolArgs["auto-capture"];
 
 const noScreenshot = toolArgs["no-screenshot"] === true;
 delete toolArgs["no-screenshot"];
+
+const softFail = toolArgs["soft-fail"] === true;
+delete toolArgs["soft-fail"];
 
 if (!noScreenshot && AUTO_SCREENSHOT_TOOLS.includes(tool)) {
   toolArgs.autoScreenshot = true;
@@ -1683,6 +1687,11 @@ async function handleResponse(response) {
   } else if (data?.success === true) {
     console.log("OK");
   } else if (data?.error) {
+    if (softFail) {
+      console.warn("Warning:", data.error);
+      socket.end();
+      process.exit(0);
+    }
     console.error("Error:", data.error);
     if (autoCapture) {
       await performAutoCapture();
