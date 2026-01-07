@@ -6,6 +6,7 @@ const os = require("os");
 const https = require("https");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const chatgptClient = require("./chatgpt-client.cjs");
+const geminiClient = require("./gemini-client.cjs");
 const networkFormatters = require("./formatters/network.cjs");
 const networkStore = require("./network-store.cjs");
 
@@ -285,6 +286,15 @@ function formatToolContent(result) {
       return text(result.ref || "NOT_FOUND");
     }
     return text(result.content);
+  }
+  
+  // Handle ChatGPT/Gemini responses
+  if (result.response !== undefined && result.model !== undefined && result.tookMs !== undefined) {
+    let output = result.response;
+    if (result.imagePath) {
+      output += `\n\n*Image saved to: ${result.imagePath}*`;
+    }
+    return text(output);
   }
   
   if (result.messages && Array.isArray(result.messages)) {
@@ -989,6 +999,8 @@ function mapToolToMessage(tool, args, tabId) {
         generateImage: a["generate-image"],
         editImage: a["edit-image"],
         output: a.output,
+        youtube: a.youtube,
+        aspectRatio: a["aspect-ratio"],
         timeout: a.timeout ? parseInt(a.timeout, 10) * 1000 : 300000,
         ...baseMsg
       };
@@ -1321,7 +1333,75 @@ function handleToolRequest(msg, socket) {
   }
   
   if (extensionMsg.type === "GEMINI_QUERY") {
-    sendToolResponse(socket, originalId, null, "Gemini integration not yet implemented");
+    const { query, model, withPage, file, generateImage, editImage, output, youtube, aspectRatio, timeout } = extensionMsg;
+    
+    queueAiRequest(async () => {
+      // 1. Get page context if requested
+      let pageContext = null;
+      if (withPage) {
+        const pageResult = await new Promise((resolve) => {
+          const pageId = ++requestCounter;
+          pendingToolRequests.set(pageId, {
+            socket: null,
+            originalId: null,
+            tool: "get_page_text",
+            onComplete: resolve
+          });
+          writeMessage({ type: "GET_PAGE_TEXT", tabId: extensionMsg.tabId, id: pageId });
+        });
+        if (pageResult && !pageResult.error) {
+          pageContext = {
+            url: pageResult.url,
+            text: pageResult.text || pageResult.pageContent || ""
+          };
+        }
+      }
+      
+      // 2. Build full prompt
+      let fullPrompt = query || "";
+      if (pageContext) {
+        fullPrompt = `Page: ${pageContext.url}\n\n${pageContext.text}\n\n---\n\n${fullPrompt}`;
+      }
+      
+      // 3. Call Gemini client
+      const result = await geminiClient.query({
+        prompt: fullPrompt,
+        model: model || "gemini-3-pro",
+        file,
+        generateImage,
+        editImage,
+        output,
+        youtube,
+        aspectRatio,
+        timeout: timeout || 300000,
+        getCookies: () => new Promise((resolve) => {
+          const cookieId = ++requestCounter;
+          pendingToolRequests.set(cookieId, {
+            socket: null,
+            originalId: null,
+            tool: "get_cookies",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GET_GOOGLE_COOKIES", id: cookieId });
+        }),
+        log: (msg) => log(`[gemini] ${msg}`)
+      });
+      
+      return result;
+    }).then((result) => {
+      const response = { 
+        response: result.response, 
+        model: result.model, 
+        tookMs: result.tookMs 
+      };
+      if (result.imagePath) {
+        response.imagePath = result.imagePath;
+      }
+      sendToolResponse(socket, originalId, response, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+    
     return;
   }
   

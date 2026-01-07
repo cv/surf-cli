@@ -2238,9 +2238,38 @@ async function handleMessage(
     }
 
     case "GET_GOOGLE_COOKIES": {
-      const googleCookies = await chrome.cookies.getAll({ domain: ".google.com" });
-      const geminiCookies = await chrome.cookies.getAll({ domain: ".gemini.google.com" });
-      return { cookies: [...googleCookies, ...geminiCookies] };
+      // Gemini requires cookies from multiple Google domains
+      const domains = [".google.com", ".gemini.google.com", "accounts.google.com", "www.google.com"];
+      const allCookies: chrome.cookies.Cookie[] = [];
+      
+      for (const domain of domains) {
+        try {
+          const cookies = await chrome.cookies.getAll({ domain });
+          allCookies.push(...cookies);
+        } catch {}
+      }
+      
+      // Also try by URL for better coverage
+      const urls = ["https://gemini.google.com", "https://accounts.google.com", "https://www.google.com"];
+      for (const url of urls) {
+        try {
+          const cookies = await chrome.cookies.getAll({ url });
+          allCookies.push(...cookies);
+        } catch {}
+      }
+      
+      // Dedupe by name, preferring google.com domain with root path
+      const seen = new Map<string, chrome.cookies.Cookie>();
+      for (const cookie of allCookies) {
+        const existing = seen.get(cookie.name);
+        if (!existing || 
+            (cookie.domain === ".google.com" && cookie.path === "/") ||
+            (!existing.domain?.includes("google.com") && cookie.domain?.includes("google.com"))) {
+          seen.set(cookie.name, cookie);
+        }
+      }
+      
+      return { cookies: Array.from(seen.values()) };
     }
 
     default:

@@ -959,6 +959,8 @@ export class CDPController {
         status: req.status,
         flags: [],
         _requestId: req.requestId,
+        _responseReceived: true,
+        _loadingFinished: true,
       } as NetworkEntry));
     }
 

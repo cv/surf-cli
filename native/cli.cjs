@@ -72,21 +72,26 @@ const TOOLS = {
         ]
       },
       "gemini": { 
-        desc: "Send prompt to Gemini (uses browser cookies) [coming soon]", 
+        desc: "Send prompt to Gemini (uses browser cookies)", 
         args: ["query"], 
         opts: { 
           "with-page": "Include current page context",
-          model: "Model: gemini-3-pro, gemini-2.5-pro, gemini-2.5-flash",
-          file: "Attach file",
-          "generate-image": "Generate image from prompt",
-          "edit-image": "Edit existing image",
-          output: "Output file path for generated images",
-          timeout: "Timeout in seconds (default: 300 = 5min)"
+          model: "Model: gemini-3-pro (default), gemini-2.5-pro, gemini-2.5-flash",
+          file: "Attach file to analyze",
+          "generate-image": "Generate image and save to path",
+          "edit-image": "Edit existing image (use with --output)",
+          output: "Output file path for image operations",
+          youtube: "YouTube video URL to analyze",
+          "aspect-ratio": "Aspect ratio for image generation (e.g., 1:1, 16:9)",
+          timeout: "Timeout in seconds (default: 300)"
         },
         examples: [
-          { cmd: 'gemini "explain this"', desc: "Basic query" },
+          { cmd: 'gemini "explain quantum computing"', desc: "Basic query" },
           { cmd: 'gemini "summarize" --with-page', desc: "With page context" },
-          { cmd: 'gemini --generate-image "a robot surfing"', desc: "Generate image" },
+          { cmd: 'gemini "analyze" --file data.csv', desc: "With file attachment" },
+          { cmd: 'gemini "a robot surfing" --generate-image /tmp/robot.png', desc: "Generate image" },
+          { cmd: 'gemini "add sunglasses" --edit-image photo.jpg --output out.jpg', desc: "Edit image" },
+          { cmd: 'gemini "summarize this video" --youtube "https://youtube.com/..."', desc: "YouTube analysis" },
         ]
       },
       "ai": { 
@@ -1378,6 +1383,8 @@ if (tool === "smoke") {
 
 const PRIMARY_ARG_MAP = {
   ai: "query",
+  gemini: "query",
+  chatgpt: "query",
   navigate: "url",
   go: "url",
   js: "code",

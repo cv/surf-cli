@@ -158,13 +158,20 @@ surf tab.group --name "Work" --color blue
 Query AI models using your browser's logged-in session:
 
 ```bash
+# ChatGPT
 surf chatgpt "explain this code"
 surf chatgpt "summarize" --with-page     # Include page context
 surf chatgpt "analyze" --model gpt-4o    # Specify model
+surf chatgpt "review" --file code.ts     # Attach file
 
-# Coming soon
-surf gemini "explain this"
-surf gemini --generate-image "a robot surfing"
+# Gemini
+surf gemini "explain quantum computing"
+surf gemini "summarize" --with-page                           # Include page context
+surf gemini "analyze" --file data.csv                         # Attach file
+surf gemini "a robot surfing" --generate-image /tmp/robot.png # Generate image
+surf gemini "add sunglasses" --edit-image photo.jpg --output out.jpg
+surf gemini "summarize" --youtube "https://youtube.com/..."   # YouTube analysis
+surf gemini "hello" --model gemini-2.5-flash                  # Model selection
 ```
 
 Requires being logged into chatgpt.com or gemini.google.com in Chrome.
