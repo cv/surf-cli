@@ -1296,7 +1296,7 @@ const parseArgs = (rawArgs) => {
         result.options[key] = true;
       } else {
         const next = rawArgs[i + 1];
-        if (next !== undefined && !next.startsWith("--")) {
+        if (next !== undefined && !next.startsWith("--") && !next.startsWith("-")) {
           let val = next;
           if (val === "true") val = true;
           else if (val === "false") val = false;
@@ -1308,6 +1308,13 @@ const parseArgs = (rawArgs) => {
           result.options[key] = true;
         }
       }
+    } else if (arg === "-v") {
+      result.options.v = true;
+    } else if (arg === "-vv") {
+      result.options.vv = true;
+    } else if (arg.startsWith("-") && arg.length === 2) {
+      // Short flag like -n, -f
+      result.options[arg.slice(1)] = true;
     } else {
       result.positional.push(arg);
     }
@@ -1476,7 +1483,10 @@ if ((tool === "screenshot" || tool === "snap") && outputPath) {
 }
 
 const methodFlag = toolArgs.method;
-delete toolArgs.method;
+// Keep method for network filtering, only delete for other tools
+if (tool !== 'network' && tool !== 'get_network_entries') {
+  delete toolArgs.method;
+}
 
 const streamMode = toolArgs.stream === true;
 delete toolArgs.stream;

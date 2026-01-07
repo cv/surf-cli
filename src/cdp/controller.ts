@@ -16,6 +16,12 @@ interface NetworkRequest {
   status?: number;
   type?: string;
   timestamp: number;
+  requestHeaders?: Record<string, string>;
+  requestBody?: string;
+  responseHeaders?: Record<string, string>;
+  responseBody?: string;
+  mimeType?: string;
+  duration?: number;
 }
 
 export interface NetworkEntry {
@@ -315,12 +321,21 @@ export class CDPController {
     this.networkRequestStartTimes.set(params.requestId, timestamp);
 
     // Legacy format for backward compatibility
+    const reqHeaders: Record<string, string> = {};
+    if (req.headers) {
+      for (const [key, value] of Object.entries(req.headers)) {
+        reqHeaders[key] = String(value);
+      }
+    }
+
     requests.push({
       requestId: params.requestId,
       url: req.url,
       method: req.method,
       type: params.type,
       timestamp,
+      requestHeaders: reqHeaders,
+      requestBody: req.postData,
     });
 
     if (requests.length > 500) requests.shift();
@@ -380,6 +395,16 @@ export class CDPController {
     const existing = requests.find((r) => r.requestId === params.requestId);
     if (existing) {
       existing.status = params.response?.status;
+      existing.mimeType = params.response?.mimeType;
+
+      // Capture response headers
+      if (params.response?.headers) {
+        const respHeaders: Record<string, string> = {};
+        for (const [key, value] of Object.entries(params.response.headers)) {
+          respHeaders[key] = String(value);
+        }
+        existing.responseHeaders = respHeaders;
+      }
 
       const callbacks = this.networkCallbacks.get(tabId);
       if (callbacks) {
@@ -495,6 +520,50 @@ export class CDPController {
   }
 
   private async handleLoadingFinished(tabId: number, params: any): Promise<void> {
+    // Update the simple requests array
+    const requests = this.networkRequests.get(tabId) || [];
+    const existing = requests.find((r) => r.requestId === params.requestId);
+    if (existing) {
+      // Calculate duration
+      const startTime = this.networkRequestStartTimes.get(params.requestId);
+      const now = params.timestamp ? params.timestamp * 1000 : Date.now();
+      if (startTime) {
+        existing.duration = Math.round(now - startTime);
+      }
+
+      // Fetch response body for small non-static responses (< 16KB)
+      const shouldFetchBody = 
+        !this.isStaticAsset(existing.mimeType) &&
+        !this.isBinaryType(existing.mimeType) &&
+        (params.encodedDataLength || 0) <= CDPController.MAX_INLINE_BODY_SIZE;
+
+      if (shouldFetchBody) {
+        try {
+          const result = await this.send(tabId, "Network.getResponseBody", {
+            requestId: params.requestId,
+          });
+          
+          if (result.base64Encoded) {
+            try {
+              existing.responseBody = atob(result.body);
+            } catch {
+              existing.responseBody = result.body;
+            }
+          } else {
+            existing.responseBody = result.body;
+          }
+          
+          // Truncate if too large
+          if (existing.responseBody && existing.responseBody.length > CDPController.MAX_INLINE_BODY_SIZE) {
+            existing.responseBody = existing.responseBody.slice(0, CDPController.MAX_INLINE_BODY_SIZE);
+          }
+        } catch (e) {
+          // Body may not be available (e.g., cached, redirected)
+        }
+      }
+    }
+
+    // Update full NetworkEntry format
     const entriesMap = this.networkEntries.get(tabId);
     const entry = entriesMap?.get(params.requestId);
     if (!entry) return;

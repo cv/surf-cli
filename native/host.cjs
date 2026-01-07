@@ -6,6 +6,7 @@ const os = require("os");
 const https = require("https");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const chatgptClient = require("./chatgpt-client.cjs");
+const networkFormatters = require("./formatters/network.cjs");
 
 const SOCKET_PATH = "/tmp/surf.sock";
 
@@ -294,16 +295,32 @@ function formatToolContent(result) {
     return text(formatted || "No console messages");
   }
 
-  if (result.requests && Array.isArray(result.requests)) {
-    if (result.requests.length === 0) {
+  // Handle both requests (basic) and entries (full) formats
+  const items = result.requests || result.entries;
+  if (items && Array.isArray(items)) {
+    if (items.length === 0) {
       return text("No network requests captured");
     }
-    const formatted = result.requests.map(r => {
-      const status = String(r.status || '-').padStart(3);
-      const method = (r.method || 'GET').padEnd(7);
-      const type = (r.type || '').padEnd(10);
-      return `${status} ${method} ${type} ${r.url}`;
-    }).join("\n");
+    let formatted;
+    if (result.format === 'curl') {
+      formatted = networkFormatters.formatCurlBatch(items);
+    } else if (result.format === 'urls') {
+      formatted = networkFormatters.formatUrls(items);
+    } else if (result.format === 'raw') {
+      formatted = networkFormatters.formatRaw(items);
+    } else if (result.verbose > 0) {
+      formatted = networkFormatters.formatVerbose(items, result.verbose);
+    } else if (result.entries) {
+      // entries format means full data was requested - use verbose level 1
+      formatted = networkFormatters.formatVerbose(items, 1);
+    } else {
+      formatted = items.map(r => {
+        const status = String(r.status || '-').padStart(3);
+        const method = (r.method || 'GET').padEnd(7);
+        const type = (r.type || '').padEnd(10);
+        return `${status} ${method} ${type} ${r.url}`;
+      }).join("\n");
+    }
     return text(formatted);
   }
 
@@ -620,11 +637,16 @@ function mapToolToMessage(tool, args, tabId) {
       };
     case "network":
     case "get_network_entries":
-      // Use READ_NETWORK_REQUESTS which is proven to work
       return { 
-        type: "READ_NETWORK_REQUESTS", 
+        type: "READ_NETWORK_REQUESTS",
+        full: a.v || a.vv || a.format === 'curl' || a.format === 'verbose',
         urlPattern: a.filter || a.url_pattern || a.origin,
+        method: a.method,
+        status: a.status,
+        contentType: a.type,
         limit: a.limit || a.last,
+        format: a.format,
+        verbose: a.v ? 1 : (a.vv ? 2 : 0),
         ...baseMsg 
       };
 

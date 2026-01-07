@@ -1408,9 +1408,20 @@ async function handleMessage(
 
       // If full flag is passed, use getNetworkEntries for rich data
       if (message.full) {
-        const entries = cdp.getNetworkEntries(tabId, {
+        let entries = cdp.getNetworkEntries(tabId, {
           urlPattern: message.urlPattern,
         });
+        
+        // Apply filters
+        if (message.method) {
+          entries = entries.filter(e => e.method === message.method);
+        }
+        if (message.status) {
+          entries = entries.filter(e => e.status === message.status);
+        }
+        if (message.contentType) {
+          entries = entries.filter(e => e.type === message.contentType);
+        }
         
         if (message.clear) {
           cdp.clearNetworkRequests(tabId);
@@ -1418,19 +1429,38 @@ async function handleMessage(
         
         // Return entries sliced to limit
         const limit = message.limit || 100;
-        return { entries: entries.slice(0, limit) };
+        return { 
+          entries: entries.slice(0, limit),
+          format: message.format,
+          verbose: message.verbose
+        };
       }
 
-      const requests = cdp.getNetworkRequests(tabId, {
+      let requests = cdp.getNetworkRequests(tabId, {
         urlPattern: message.urlPattern,
         limit: message.limit || 100,
       });
+
+      // Apply filters
+      if (message.method) {
+        requests = requests.filter(r => r.method === message.method);
+      }
+      if (message.status) {
+        requests = requests.filter(r => r.status === message.status);
+      }
+      if (message.contentType) {
+        requests = requests.filter(r => r.type === message.contentType);
+      }
 
       if (message.clear) {
         cdp.clearNetworkRequests(tabId);
       }
 
-      return { requests };
+      return { 
+        requests,
+        format: message.format,
+        verbose: message.verbose
+      };
     }
 
     case "CLEAR_NETWORK_REQUESTS": {
