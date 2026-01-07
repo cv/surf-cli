@@ -96,18 +96,18 @@ if (fs.existsSync(PERSISTENCE_FILE)) {
 // Navigate to test page and setup
 console.log("Setting up test environment...");
 run(`go "https://httpbin.org/get" --tab-id ${tabId}`);
-sleep(2500);
+sleep(3000);
 
 // Trigger various requests for testing
 console.log("Generating test traffic...\n");
 run(`js "fetch('https://httpbin.org/headers')" --tab-id ${tabId}`);
-sleep(500);
-run(`js "fetch('https://httpbin.org/post', {method:'POST', headers:{'Content-Type':'application/json','X-Test':'value'}, body:JSON.stringify({user:'test',id:123})})" --tab-id ${tabId}`);
-sleep(500);
-run(`js "fetch('https://httpbin.org/status/404')" --tab-id ${tabId}`);
-sleep(500);
-run(`js "fetch('https://httpbin.org/html')" --tab-id ${tabId}`);
 sleep(1500);
+run(`js "fetch('https://httpbin.org/post', {method:'POST', headers:{'Content-Type':'application/json','X-Test':'value'}, body:JSON.stringify({user:'test',id:123})})" --tab-id ${tabId}`);
+sleep(1500);
+run(`js "fetch('https://httpbin.org/status/404')" --tab-id ${tabId}`);
+sleep(1500);
+run(`js "fetch('https://httpbin.org/html')" --tab-id ${tabId}`);
+sleep(2500);
 
 // ============================================================================
 // Basic Capture Tests
@@ -287,7 +287,7 @@ console.log("─".repeat(70));
 test("Persists entries to /tmp/surf/requests.jsonl", () => {
   // Trigger verbose mode to ensure persistence (full data required)
   run(`network -v --tab-id ${tabId}`);
-  sleep(500);
+  sleep(1500);  // Allow time for async writes to complete
   
   assert(fs.existsSync(PERSISTENCE_FILE), "requests.jsonl should exist");
 });
@@ -321,6 +321,61 @@ test("Custom path via SURF_NETWORK_PATH env", () => {
   const defaultPath = networkStore.getBasePath();
   assert(defaultPath === "/tmp/surf" || defaultPath.includes("surf"), 
     "Should have default path");
+});
+
+// ============================================================================
+// Stats & Origins Commands
+// ============================================================================
+
+console.log("\n" + "─".repeat(70));
+console.log("Stats & Origins Commands");
+console.log("─".repeat(70));
+
+test("network.stats returns statistics", () => {
+  const output = run(`network.stats --tab-id ${tabId}`);
+  assertIncludes(output, "Network Capture Statistics", "Should show title");
+  assertIncludes(output, "Total Requests:", "Should show total requests");
+  assertIncludes(output, "By Method:", "Should show method breakdown");
+  assertIncludes(output, "By Status:", "Should show status breakdown");
+});
+
+test("network.stats shows correct counts", () => {
+  const output = run(`network.stats --tab-id ${tabId}`);
+  // Should have at least our test requests
+  assertMatch(output, /Total Requests:\s+[1-9]\d*/, "Should have non-zero requests");
+  assertMatch(output, /GET\s+\d+/, "Should count GET requests");
+});
+
+test("network.origins shows origin table", () => {
+  const output = run(`network.origins --tab-id ${tabId}`);
+  assertIncludes(output, "Origin", "Should show Origin column header");
+  assertIncludes(output, "Requests", "Should show Requests column");
+  assertIncludes(output, "httpbin.org", "Should show httpbin origin");
+});
+
+// ============================================================================
+// Entry Lookup by ID
+// ============================================================================
+
+console.log("\n" + "─".repeat(70));
+console.log("Entry Lookup by ID");
+console.log("─".repeat(70));
+
+test("network.get with entry.id format (r_xxx)", () => {
+  // Get the first entry's ID from verbose output
+  const listOutput = run(`network -v --tab-id ${tabId}`);
+  const idMatch = listOutput.match(/ID:\s+(r_[\d._]+)/);
+  assert(idMatch, "Should find entry ID in verbose output");
+  
+  const entryId = idMatch[1];
+  const output = run(`network.get ${entryId} --tab-id ${tabId}`);
+  assertIncludes(output, entryId, "Should return entry with matching ID");
+  assertIncludes(output, "Status:", "Should show entry details");
+});
+
+test("network.get with invalid ID returns error", () => {
+  const output = run(`network.get invalid_id_12345 --tab-id ${tabId}`);
+  assertIncludes(output, "not found", "Should report entry not found");
 });
 
 // ============================================================================

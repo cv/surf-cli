@@ -1515,7 +1515,21 @@ async function handleMessage(
       if (!tabId) throw new Error("No tabId provided");
       if (!message.requestId) throw new Error("No requestId provided");
       
-      const entry = cdp.getNetworkEntry(tabId, message.requestId);
+      // First try direct lookup by CDP requestId
+      let entry = cdp.getNetworkEntry(tabId, message.requestId);
+      
+      // If not found, try lookup by entry.id (r_xxx format)
+      if (!entry) {
+        const entries = cdp.getNetworkEntries(tabId, {});
+        entry = entries.find(e => e.id === message.requestId) || null;
+      }
+      
+      // Also try lookup by _requestId for entries that use the generated id
+      if (!entry) {
+        const entries = cdp.getNetworkEntries(tabId, {});
+        entry = entries.find(e => e._requestId === message.requestId) || null;
+      }
+      
       if (!entry) {
         return { error: `Entry not found: ${message.requestId}` };
       }
@@ -1526,7 +1540,17 @@ async function handleMessage(
       if (!tabId) throw new Error("No tabId provided");
       if (!message.requestId) throw new Error("No requestId provided");
       
-      const result = await cdp.getResponseBody(tabId, message.requestId);
+      // If requestId looks like entry.id format (r_xxx), look up the CDP requestId
+      let cdpRequestId = message.requestId;
+      if (message.requestId.startsWith('r_')) {
+        const entries = cdp.getNetworkEntries(tabId, {});
+        const entry = entries.find(e => e.id === message.requestId);
+        if (entry) {
+          cdpRequestId = entry._requestId;
+        }
+      }
+      
+      const result = await cdp.getResponseBody(tabId, cdpRequestId);
       return result;
     }
 
@@ -1546,6 +1570,55 @@ async function handleMessage(
       }
       
       return { origins };
+    }
+
+    case "GET_NETWORK_STATS": {
+      if (!tabId) throw new Error("No tabId provided");
+      
+      const entries = cdp.getNetworkEntries(tabId, {});
+      const origins: Record<string, number> = {};
+      const byMethod: Record<string, number> = {};
+      const byStatus: Record<string, number> = {};
+      let totalSize = 0;
+      let oldestEntry = Infinity;
+      let newestEntry = 0;
+      
+      for (const entry of entries) {
+        // Count by origin
+        if (!origins[entry.origin]) {
+          origins[entry.origin] = 0;
+        }
+        origins[entry.origin]++;
+        
+        // Count by method
+        const method = entry.method || 'GET';
+        byMethod[method] = (byMethod[method] || 0) + 1;
+        
+        // Count by status
+        if (entry.status) {
+          const statusGroup = `${Math.floor(entry.status / 100)}xx`;
+          byStatus[statusGroup] = (byStatus[statusGroup] || 0) + 1;
+        }
+        
+        // Sum size
+        totalSize += (entry.responseBodySize || 0);
+        
+        // Track time range
+        if (entry.ts < oldestEntry) oldestEntry = entry.ts;
+        if (entry.ts > newestEntry) newestEntry = entry.ts;
+      }
+      
+      return {
+        stats: {
+          totalRequests: entries.length,
+          totalSize,
+          uniqueOrigins: Object.keys(origins).length,
+          startTime: oldestEntry === Infinity ? null : oldestEntry,
+          duration: (newestEntry && oldestEntry !== Infinity) ? newestEntry - oldestEntry : 0,
+          byMethod,
+          byStatus,
+        }
+      };
     }
 
     case "RESIZE_WINDOW": {

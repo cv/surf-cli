@@ -245,9 +245,30 @@ function formatEntry(entry) {
 
 /**
  * Origins summary table
+ * Accepts either array of {origin, count, totalSize, lastSeen} or 
+ * object map of {origin: {count, size, lastSeen}}
  */
 function formatOrigins(origins) {
-  if (!origins || origins.length === 0) {
+  if (!origins) {
+    return 'No origins captured';
+  }
+  
+  // Convert object map to array if needed
+  let originsArray;
+  if (Array.isArray(origins)) {
+    originsArray = origins;
+  } else if (typeof origins === 'object') {
+    originsArray = Object.entries(origins).map(([origin, data]) => ({
+      origin,
+      count: data.count || 0,
+      totalSize: data.size || data.totalSize || 0,
+      lastSeen: data.lastSeen || 0
+    }));
+  } else {
+    return 'No origins captured';
+  }
+  
+  if (originsArray.length === 0) {
     return 'No origins captured';
   }
   
@@ -257,7 +278,7 @@ function formatOrigins(origins) {
   lines.push(header);
   lines.push(separator);
   
-  for (const o of origins) {
+  for (const o of originsArray) {
     const origin = truncateUrl(o.origin, 38).padEnd(40);
     const count = String(o.count || 0).padEnd(8);
     const size = formatSize(o.totalSize || 0).padEnd(7);

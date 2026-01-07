@@ -431,9 +431,9 @@ const TOOLS = {
       "network.export": { 
         desc: "Export captured requests", 
         args: [],
-        opts: { har: "Export as HAR", jsonl: "Export as JSONL", output: "Output file path" },
+        opts: { jsonl: "Export as JSONL", output: "Output file path" },
         examples: [
-          { cmd: "network.export --har", desc: "Export as HAR" }
+          { cmd: "network.export --jsonl --output /tmp/requests.jsonl", desc: "Export as JSONL" }
         ]
       },
       "network.path": { 

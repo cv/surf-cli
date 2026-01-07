@@ -222,29 +222,22 @@ function appendEntrySync(entry) {
     // Try to acquire lock
     lockFd = fs.openSync(lockPath, "wx");
   } catch (err) {
-    // Lock exists, wait and retry (simple spin)
-    let retries = 50;
-    while (retries > 0) {
-      try {
-        // Check if lock is stale (> 5 seconds old)
-        const stat = fs.statSync(lockPath);
-        if (Date.now() - stat.mtimeMs > 5000) {
-          fs.unlinkSync(lockPath);
+    // Lock exists - check if stale and remove, otherwise proceed without lock
+    try {
+      const stat = fs.statSync(lockPath);
+      if (Date.now() - stat.mtimeMs > 5000) {
+        fs.unlinkSync(lockPath);
+        try {
+          lockFd = fs.openSync(lockPath, "wx");
+        } catch (e) {
+          // Still can't get lock, proceed without it
         }
-      } catch (e) {}
-      
-      try {
-        lockFd = fs.openSync(lockPath, "wx");
-        break;
-      } catch (e) {
-        retries--;
-        // Simple sleep
-        const start = Date.now();
-        while (Date.now() - start < 10) {}
       }
+    } catch (e) {
+      // Lock file gone or inaccessible, proceed without lock
     }
     
-    if (retries === 0) {
+    if (lockFd === undefined) {
       // Proceed without lock as fallback
       fs.appendFileSync(getRequestsPath(), line, { flag: "a" });
       return fullEntry;
