@@ -12,10 +12,9 @@
     "declarationMap": false,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["chrome"]
+    "types": ["chrome", "vitest/globals"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }
