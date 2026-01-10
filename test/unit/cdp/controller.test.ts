@@ -1,6 +1,25 @@
+import { vi } from "vitest";
 import { CDPController } from "../../../src/cdp/controller";
 
+// Mock chrome.debugger API
+const mockChrome = {
+  debugger: {
+    attach: vi.fn(),
+    detach: vi.fn(),
+    sendCommand: vi.fn(),
+    onEvent: { addListener: vi.fn(), removeListener: vi.fn() },
+    onDetach: { addListener: vi.fn(), removeListener: vi.fn() },
+  },
+};
+
+// Set global chrome before tests
+vi.stubGlobal("chrome", mockChrome);
+
 describe("CDPController", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe("parseModifiers", () => {
     let controller: CDPController;
 
@@ -61,6 +80,61 @@ describe("CDPController", () => {
     it("ignores unknown modifiers", () => {
       expect(controller.parseModifiers("unknown")).toBe(0);
       expect(controller.parseModifiers("ctrl+unknown")).toBe(2);
+    });
+  });
+
+  describe("getConsoleMessages", () => {
+    let controller: CDPController;
+    const tabId = 123;
+
+    beforeEach(() => {
+      controller = new CDPController();
+      // Clear console messages returns empty array for unknown tab
+    });
+
+    it("returns empty array for tab with no messages", () => {
+      const messages = controller.getConsoleMessages(tabId);
+      expect(messages).toStrictEqual([]);
+    });
+
+    it("returns empty array after clearing messages", () => {
+      controller.clearConsoleMessages(tabId);
+      const messages = controller.getConsoleMessages(tabId);
+      expect(messages).toStrictEqual([]);
+    });
+  });
+
+  describe("getNetworkRequests", () => {
+    let controller: CDPController;
+    const tabId = 456;
+
+    beforeEach(() => {
+      controller = new CDPController();
+    });
+
+    it("returns empty array for tab with no requests", () => {
+      const requests = controller.getNetworkRequests(tabId);
+      expect(requests).toStrictEqual([]);
+    });
+
+    it("returns empty array after clearing requests", () => {
+      controller.clearNetworkRequests(tabId);
+      const requests = controller.getNetworkRequests(tabId);
+      expect(requests).toStrictEqual([]);
+    });
+  });
+
+  describe("getDialogInfo", () => {
+    let controller: CDPController;
+    const tabId = 789;
+
+    beforeEach(() => {
+      controller = new CDPController();
+    });
+
+    it("returns null when no dialog is pending", () => {
+      const dialog = controller.getDialogInfo(tabId);
+      expect(dialog).toBeNull();
     });
   });
 });
