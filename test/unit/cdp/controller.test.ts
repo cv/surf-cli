@@ -497,4 +497,57 @@ describe("CDPController", () => {
       );
     });
   });
+
+  describe("hover", () => {
+    let controller: CDPController;
+    const tabId = 1100;
+
+    beforeEach(() => {
+      controller = new CDPController();
+      mockChrome.debugger.attach.mockResolvedValue(undefined);
+      mockChrome.debugger.sendCommand.mockResolvedValue({});
+    });
+
+    it("dispatches mouseMoved event", async () => {
+      await controller.hover(tabId, 150, 250);
+
+      expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+        { tabId },
+        "Input.dispatchMouseEvent",
+        expect.objectContaining({
+          type: "mouseMoved",
+          x: 150,
+          y: 250,
+          button: "none",
+        }),
+      );
+    });
+  });
+
+  describe("scroll", () => {
+    let controller: CDPController;
+    const tabId = 1200;
+
+    beforeEach(() => {
+      controller = new CDPController();
+      mockChrome.debugger.attach.mockResolvedValue(undefined);
+      mockChrome.debugger.sendCommand.mockResolvedValue({});
+    });
+
+    it("dispatches mouseWheel event with deltas", async () => {
+      await controller.scroll(tabId, 100, 200, 0, 300);
+
+      expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+        { tabId },
+        "Input.dispatchMouseEvent",
+        expect.objectContaining({
+          type: "mouseWheel",
+          x: 100,
+          y: 200,
+          deltaX: 0,
+          deltaY: 300,
+        }),
+      );
+    });
+  });
 });
