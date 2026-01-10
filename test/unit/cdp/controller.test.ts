@@ -1249,4 +1249,48 @@ describe("CDPController", () => {
       expect(result.error).toContain("SyntaxError");
     });
   });
+
+  describe("setFileInputBySelector", () => {
+    let controller: CDPController;
+    const tabId = 3700;
+
+    beforeEach(() => {
+      controller = new CDPController();
+      mockChrome.debugger.attach.mockResolvedValue(undefined);
+    });
+
+    it("sets files on input element", async () => {
+      mockChrome.debugger.sendCommand
+        .mockResolvedValueOnce({}) // Page.enable
+        .mockResolvedValueOnce({}) // DOM.enable
+        .mockResolvedValueOnce({ root: { nodeId: 1 } }) // getDocument
+        .mockResolvedValueOnce({ nodeId: 42 }) // querySelector
+        .mockResolvedValueOnce({}); // setFileInputFiles
+
+      const result = await controller.setFileInputBySelector(tabId, "#upload", ["/path/to/file"]);
+
+      expect(result.success).toBe(true);
+      expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+        { tabId },
+        "DOM.setFileInputFiles",
+        {
+          nodeId: 42,
+          files: ["/path/to/file"],
+        },
+      );
+    });
+
+    it("returns error when element not found", async () => {
+      mockChrome.debugger.sendCommand
+        .mockResolvedValueOnce({}) // Page.enable
+        .mockResolvedValueOnce({}) // DOM.enable
+        .mockResolvedValueOnce({ root: { nodeId: 1 } }) // getDocument
+        .mockResolvedValueOnce({ nodeId: 0 }); // querySelector returns 0
+
+      const result = await controller.setFileInputBySelector(tabId, "#missing", ["/file"]);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Could not find element");
+    });
+  });
 });
