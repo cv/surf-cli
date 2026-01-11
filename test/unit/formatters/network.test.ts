@@ -130,7 +130,7 @@ describe("network formatters", () => {
       expect(curl).toContain("curl -X POST");
       expect(curl).toContain("-H 'Content-Type: application/json'");
       expect(curl).toContain("-H 'Authorization: Bearer token123'");
-      expect(curl).toContain("-d '{\"key\":\"value\"}'");
+      expect(curl).toContain('-d \'{"key":"value"}\'');
     });
   });
 });

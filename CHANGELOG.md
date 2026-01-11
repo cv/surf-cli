@@ -10,6 +10,7 @@
 - **`surf --help-topic windows`** - New help topic explaining window isolation workflow
 - **Extension disconnect detection** - CLI detects when extension disconnects and exits cleanly with a helpful message
 - **Testing infrastructure** - Added vitest with coverage, Chrome API mocks, and network formatter tests
+- **Biome linter** - Strict linting for test code with rules for test best practices (no focused/skipped tests, no console, no any, etc.)
 - **Perplexity AI integration** - Query Perplexity using browser session via `surf perplexity "query"`. Supports `--with-page` for context, `--mode` for search modes, and `--model` for model selection (Pro features).
 - **`surf read` now includes visible text by default** - Reduces agent round-trips by returning both accessibility tree and page text content in one call. Use `--no-text` to get only interactive elements.
 

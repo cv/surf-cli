@@ -10,6 +10,10 @@
     "dev": "vite build --watch --mode development",
     "build": "vite build",
     "check": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "lint:test": "biome check test/",
+    "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -28,6 +32,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
     "@types/chrome": "^0.0.287",
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.16",
