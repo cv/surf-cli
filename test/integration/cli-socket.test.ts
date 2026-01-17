@@ -461,4 +461,36 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("tab.switch");
     expect(request.params.args.id).toBe(12345);
   });
+
+  it("sends tab.close command with id", async () => {
+    const request = (await runCliAndCapture(["tab.close", "999"])) as {
+      type: string;
+      params: { tool: string; args: { id: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.close");
+    expect(request.params.args.id).toBe(999);
+  });
+
+  it("sends tab.name command with name", async () => {
+    const request = (await runCliAndCapture(["tab.name", "main-tab"])) as {
+      type: string;
+      params: { tool: string; args: { name: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.name");
+    expect(request.params.args.name).toBe("main-tab");
+  });
+
+  it("sends tab.reload command", async () => {
+    const request = (await runCliAndCapture(["tab.reload"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.reload");
+  });
 });
