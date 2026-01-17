@@ -450,4 +450,15 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("cookie.list");
   });
+
+  it("sends tab.switch command with id", async () => {
+    const request = (await runCliAndCapture(["tab.switch", "12345"])) as {
+      type: string;
+      params: { tool: string; args: { id: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.switch");
+    expect(request.params.args.id).toBe(12345);
+  });
 });
