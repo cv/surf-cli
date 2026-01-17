@@ -196,4 +196,15 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("tab.list");
   });
+
+  it("sends click command with --selector option", async () => {
+    const request = (await runCliAndCapture(["click", "--selector", ".submit-btn"])) as {
+      type: string;
+      params: { tool: string; args: { selector: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("click");
+    expect(request.params.args.selector).toBe(".submit-btn");
+  });
 });
