@@ -120,4 +120,35 @@ describe("CLI to Socket communication", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("Socket not found");
   });
+
+  it("sends type command with text argument", async () => {
+    const receivedData = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+
+      server = net.createServer((socket) => {
+        let data = "";
+        socket.on("data", (chunk) => {
+          data += chunk.toString();
+          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
+        });
+        socket.on("close", () => {
+          clearTimeout(timeout);
+          resolve(data);
+        });
+      });
+
+      server.listen(SOCKET_PATH, () => {
+        const cli = spawn("node", [CLI_PATH, "type", "hello world"]);
+        cli.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+    });
+
+    const request = JSON.parse(receivedData.trim());
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("type");
+    expect(request.params.args.text).toBe("hello world");
+  });
 });
