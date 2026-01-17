@@ -218,4 +218,24 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("js");
     expect(request.params.args.code).toBe("return document.title");
   });
+
+  it("sends window.new command with url and options", async () => {
+    const request = (await runCliAndCapture([
+      "window.new",
+      "https://example.com",
+      "--width",
+      "1280",
+      "--height",
+      "720",
+    ])) as {
+      type: string;
+      params: { tool: string; args: { url: string; width: number; height: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("window.new");
+    expect(request.params.args.url).toBe("https://example.com");
+    expect(request.params.args.width).toBe(1280);
+    expect(request.params.args.height).toBe(720);
+  });
 });
