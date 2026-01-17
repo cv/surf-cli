@@ -151,4 +151,37 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("type");
     expect(request.params.args.text).toBe("hello world");
   });
+
+  it("resolves snap alias to screenshot command", async () => {
+    const receivedData = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+
+      server = net.createServer((socket) => {
+        let data = "";
+        socket.on("data", (chunk) => {
+          data += chunk.toString();
+          // Return a screenshot-like response
+          socket.write(
+            `${JSON.stringify({ result: { base64: "abc123", width: 800, height: 600 } })}\n`,
+          );
+        });
+        socket.on("close", () => {
+          clearTimeout(timeout);
+          resolve(data);
+        });
+      });
+
+      server.listen(SOCKET_PATH, () => {
+        const cli = spawn("node", [CLI_PATH, "snap"]);
+        cli.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+    });
+
+    const request = JSON.parse(receivedData.trim());
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("screenshot");
+  });
 });
