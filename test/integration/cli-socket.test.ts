@@ -786,4 +786,35 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("frame.main");
   });
+
+  it("sends history.search command with query", async () => {
+    const request = (await runCliAndCapture(["history.search", "github"])) as {
+      type: string;
+      params: { tool: string; args: { query: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("history.search");
+    expect(request.params.args.query).toBe("github");
+  });
+
+  it("sends history.list command", async () => {
+    const request = (await runCliAndCapture(["history.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("history.list");
+  });
+
+  it("sends bookmark.list command", async () => {
+    const request = (await runCliAndCapture(["bookmark.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("bookmark.list");
+  });
 });
