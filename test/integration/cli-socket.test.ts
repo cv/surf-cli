@@ -238,4 +238,15 @@ describe("CLI to Socket communication", () => {
     expect(request.params.args.width).toBe(1280);
     expect(request.params.args.height).toBe(720);
   });
+
+  it("sends window.new with --incognito boolean flag", async () => {
+    const request = (await runCliAndCapture(["window.new", "--incognito"])) as {
+      type: string;
+      params: { tool: string; args: { incognito: boolean } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("window.new");
+    expect(request.params.args.incognito).toBe(true);
+  });
 });
