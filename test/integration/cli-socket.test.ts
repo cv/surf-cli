@@ -817,4 +817,43 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("bookmark.list");
   });
+
+  it("sends cookie.get command with name", async () => {
+    const request = (await runCliAndCapture(["cookie.get", "--name", "session"])) as {
+      type: string;
+      params: { tool: string; args: { name: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("cookie.get");
+    expect(request.params.args.name).toBe("session");
+  });
+
+  it("sends cookie.set command with name and value", async () => {
+    const request = (await runCliAndCapture([
+      "cookie.set",
+      "--name",
+      "token",
+      "--value",
+      "abc123",
+    ])) as {
+      type: string;
+      params: { tool: string; args: { name: string; value: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("cookie.set");
+    expect(request.params.args.name).toBe("token");
+    expect(request.params.args.value).toBe("abc123");
+  });
+
+  it("sends cookie.clear command", async () => {
+    const request = (await runCliAndCapture(["cookie.clear"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("cookie.clear");
+  });
 });
