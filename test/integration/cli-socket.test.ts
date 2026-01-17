@@ -724,4 +724,34 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("search");
     expect(request.params.args.term).toBe("submit");
   });
+
+  it("sends dialog.dismiss command", async () => {
+    const request = (await runCliAndCapture(["dialog.dismiss"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("dialog.dismiss");
+  });
+
+  it("sends dialog.info command", async () => {
+    const request = (await runCliAndCapture(["dialog.info"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("dialog.info");
+  });
+
+  it("sends page.state command", async () => {
+    const request = (await runCliAndCapture(["page.state"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("page.state");
+  });
 });
