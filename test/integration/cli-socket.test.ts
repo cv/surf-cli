@@ -556,4 +556,35 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("scroll.bottom");
   });
+
+  it("sends wait.url command with pattern", async () => {
+    const request = (await runCliAndCapture(["wait.url", "/dashboard"])) as {
+      type: string;
+      params: { tool: string; args: { pattern: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("wait.url");
+    expect(request.params.args.pattern).toBe("/dashboard");
+  });
+
+  it("sends wait.network command", async () => {
+    const request = (await runCliAndCapture(["wait.network"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("wait.network");
+  });
+
+  it("sends wait.load command", async () => {
+    const request = (await runCliAndCapture(["wait.load"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("wait.load");
+  });
 });
