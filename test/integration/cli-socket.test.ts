@@ -101,4 +101,23 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("click");
     expect(request.params.args.ref).toBe("e5");
   });
+
+  it("exits with error when socket is not available", async () => {
+    // Don't start a server - socket file doesn't exist
+    const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
+      const cli = spawn("node", [CLI_PATH, "go", "https://example.com"]);
+      let stderr = "";
+
+      cli.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      cli.on("close", (code) => {
+        resolve({ code, stderr });
+      });
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Socket not found");
+  });
 });
