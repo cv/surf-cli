@@ -419,4 +419,35 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("emulate.network");
     expect(request.params.args.preset).toBe("slow-3g");
   });
+
+  it("sends frame.list command", async () => {
+    const request = (await runCliAndCapture(["frame.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("frame.list");
+  });
+
+  it("sends dialog.accept command with text", async () => {
+    const request = (await runCliAndCapture(["dialog.accept", "--text", "confirmed"])) as {
+      type: string;
+      params: { tool: string; args: { text: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("dialog.accept");
+    expect(request.params.args.text).toBe("confirmed");
+  });
+
+  it("sends cookie.list command", async () => {
+    const request = (await runCliAndCapture(["cookie.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("cookie.list");
+  });
 });
