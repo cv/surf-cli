@@ -12,7 +12,6 @@ describe("CLI to Socket communication", () => {
   let existingSocketBackedUp = false;
 
   beforeEach(() => {
-    // Back up existing socket if present (don't break running surf)
     if (fs.existsSync(SOCKET_PATH)) {
       fs.renameSync(SOCKET_PATH, `${SOCKET_PATH}.backup`);
       existingSocketBackedUp = true;
@@ -24,22 +23,25 @@ describe("CLI to Socket communication", () => {
       server.close();
       server = null;
     }
-    // Clean up test socket
     if (fs.existsSync(SOCKET_PATH)) {
       fs.unlinkSync(SOCKET_PATH);
     }
-    // Restore backed up socket
     if (existingSocketBackedUp && fs.existsSync(`${SOCKET_PATH}.backup`)) {
       fs.renameSync(`${SOCKET_PATH}.backup`, SOCKET_PATH);
       existingSocketBackedUp = false;
     }
   });
 
-  // Helper to run CLI and capture the request sent to socket
   const runCliAndCapture = (
     args: string[],
     response: object = { result: { success: true } },
-  ): Promise<object> => {
+  ): Promise<{
+    type: string;
+    method?: string;
+    params: { tool: string; args: Record<string, unknown> };
+    tabId?: number;
+    windowId?: number;
+  }> => {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
 
@@ -65,269 +67,372 @@ describe("CLI to Socket communication", () => {
     });
   };
 
-  it("sends navigate command as tool_request to socket", async () => {
-    const request = (await runCliAndCapture(["go", "https://example.com"])) as {
-      type: string;
-      method: string;
-      params: { tool: string; args: { url: string } };
-    };
+  // Table-driven tests for command parsing
+  const commandTests: Array<{
+    name: string;
+    args: string[];
+    expectedTool: string;
+    expectedArgs?: Record<string, unknown>;
+    expectedGlobals?: { tabId?: number; windowId?: number };
+  }> = [
+    // Navigation
+    {
+      name: "go -> navigate",
+      args: ["go", "https://example.com"],
+      expectedTool: "navigate",
+      expectedArgs: { url: "https://example.com" },
+    },
+    { name: "back", args: ["back"], expectedTool: "back" },
+    { name: "forward", args: ["forward"], expectedTool: "forward" },
+
+    // Aliases
+    { name: "snap -> screenshot", args: ["snap"], expectedTool: "screenshot" },
+    { name: "read -> page.read", args: ["read"], expectedTool: "page.read" },
+    { name: "net -> network", args: ["net"], expectedTool: "network" },
+    {
+      name: "find -> search",
+      args: ["find", "submit"],
+      expectedTool: "search",
+      expectedArgs: { term: "submit" },
+    },
+
+    // Click variants
+    {
+      name: "click with ref",
+      args: ["click", "e5"],
+      expectedTool: "click",
+      expectedArgs: { ref: "e5" },
+    },
+    {
+      name: "click with coordinates",
+      args: ["click", "100", "200"],
+      expectedTool: "click",
+      expectedArgs: { x: 100, y: 200 },
+    },
+    {
+      name: "click with selector",
+      args: ["click", "--selector", ".btn"],
+      expectedTool: "click",
+      expectedArgs: { selector: ".btn" },
+    },
+
+    // Type
+    {
+      name: "type with text",
+      args: ["type", "hello world"],
+      expectedTool: "type",
+      expectedArgs: { text: "hello world" },
+    },
+    {
+      name: "type with --submit",
+      args: ["type", "query", "--submit"],
+      expectedTool: "type",
+      expectedArgs: { text: "query", submit: true },
+    },
+
+    // Key
+    { name: "key", args: ["key", "Enter"], expectedTool: "key", expectedArgs: { key: "Enter" } },
+
+    // Mouse
+    {
+      name: "hover with ref",
+      args: ["hover", "--ref", "e3"],
+      expectedTool: "hover",
+      expectedArgs: { ref: "e3" },
+    },
+    {
+      name: "drag",
+      args: ["drag", "--from", "100,100", "--to", "200,200"],
+      expectedTool: "drag",
+      expectedArgs: { from: "100,100", to: "200,200" },
+    },
+
+    // Scroll
+    {
+      name: "scroll with direction",
+      args: ["scroll", "--direction", "down", "--amount", "3"],
+      expectedTool: "scroll",
+      expectedArgs: { direction: "down", amount: 3 },
+    },
+    { name: "scroll.top", args: ["scroll.top"], expectedTool: "scroll.top" },
+    { name: "scroll.bottom", args: ["scroll.bottom"], expectedTool: "scroll.bottom" },
+    {
+      name: "scroll.to with ref",
+      args: ["scroll.to", "--ref", "e10"],
+      expectedTool: "scroll.to",
+      expectedArgs: { ref: "e10" },
+    },
+    { name: "scroll.info", args: ["scroll.info"], expectedTool: "scroll.info" },
+
+    // Page
+    { name: "page.text", args: ["page.text"], expectedTool: "page.text" },
+    { name: "page.state", args: ["page.state"], expectedTool: "page.state" },
+
+    // Tab
+    { name: "tab.list", args: ["tab.list"], expectedTool: "tab.list" },
+    {
+      name: "tab.new with url",
+      args: ["tab.new", "https://github.com"],
+      expectedTool: "tab.new",
+      expectedArgs: { url: "https://github.com" },
+    },
+    {
+      name: "tab.switch",
+      args: ["tab.switch", "12345"],
+      expectedTool: "tab.switch",
+      expectedArgs: { id: 12345 },
+    },
+    {
+      name: "tab.close",
+      args: ["tab.close", "999"],
+      expectedTool: "tab.close",
+      expectedArgs: { id: 999 },
+    },
+    {
+      name: "tab.name",
+      args: ["tab.name", "main-tab"],
+      expectedTool: "tab.name",
+      expectedArgs: { name: "main-tab" },
+    },
+    { name: "tab.reload", args: ["tab.reload"], expectedTool: "tab.reload" },
+
+    // Window
+    {
+      name: "window.new with url and size",
+      args: ["window.new", "https://example.com", "--width", "1280", "--height", "720"],
+      expectedTool: "window.new",
+      expectedArgs: { url: "https://example.com", width: 1280, height: 720 },
+    },
+    {
+      name: "window.new --incognito",
+      args: ["window.new", "--incognito"],
+      expectedTool: "window.new",
+      expectedArgs: { incognito: true },
+    },
+    { name: "window.list", args: ["window.list"], expectedTool: "window.list" },
+    {
+      name: "window.focus",
+      args: ["window.focus", "555"],
+      expectedTool: "window.focus",
+      expectedArgs: { id: 555 },
+    },
+    {
+      name: "window.close",
+      args: ["window.close", "777"],
+      expectedTool: "window.close",
+      expectedArgs: { id: 777 },
+    },
+    {
+      name: "window.resize",
+      args: ["window.resize", "--id", "123", "--width", "1024", "--height", "768"],
+      expectedTool: "window.resize",
+      expectedArgs: { id: 123, width: 1024, height: 768 },
+    },
+
+    // Wait
+    {
+      name: "wait.element",
+      args: ["wait.element", "#result", "--timeout", "5000"],
+      expectedTool: "wait.element",
+      expectedArgs: { selector: "#result", timeout: 5000 },
+    },
+    {
+      name: "wait.url",
+      args: ["wait.url", "/dashboard"],
+      expectedTool: "wait.url",
+      expectedArgs: { pattern: "/dashboard" },
+    },
+    { name: "wait.network", args: ["wait.network"], expectedTool: "wait.network" },
+    { name: "wait.load", args: ["wait.load"], expectedTool: "wait.load" },
+    { name: "wait.dom", args: ["wait.dom"], expectedTool: "wait.dom" },
+
+    // Locate
+    {
+      name: "locate.role",
+      args: ["locate.role", "button", "--name", "Submit"],
+      expectedTool: "locate.role",
+      expectedArgs: { role: "button", name: "Submit" },
+    },
+    {
+      name: "locate.text",
+      args: ["locate.text", "Sign In"],
+      expectedTool: "locate.text",
+      expectedArgs: { text: "Sign In" },
+    },
+
+    // JavaScript
+    {
+      name: "js with code",
+      args: ["js", "return document.title"],
+      expectedTool: "js",
+      expectedArgs: { code: "return document.title" },
+    },
+
+    // Network (network and console commands read from local files, tested separately)
+    {
+      name: "network.get",
+      args: ["network.get", "req-123"],
+      expectedTool: "network.get",
+      expectedArgs: { id: "req-123" },
+    },
+    {
+      name: "network.body",
+      args: ["network.body", "req-456"],
+      expectedTool: "network.body",
+      expectedArgs: { id: "req-456" },
+    },
+    { name: "network.clear", args: ["network.clear"], expectedTool: "network.clear" },
+
+    // Dialog
+    {
+      name: "dialog.accept with text",
+      args: ["dialog.accept", "--text", "confirmed"],
+      expectedTool: "dialog.accept",
+      expectedArgs: { text: "confirmed" },
+    },
+    { name: "dialog.dismiss", args: ["dialog.dismiss"], expectedTool: "dialog.dismiss" },
+    { name: "dialog.info", args: ["dialog.info"], expectedTool: "dialog.info" },
+
+    // Cookie
+    { name: "cookie.list", args: ["cookie.list"], expectedTool: "cookie.list" },
+    {
+      name: "cookie.get",
+      args: ["cookie.get", "--name", "session"],
+      expectedTool: "cookie.get",
+      expectedArgs: { name: "session" },
+    },
+    {
+      name: "cookie.set",
+      args: ["cookie.set", "--name", "token", "--value", "abc123"],
+      expectedTool: "cookie.set",
+      expectedArgs: { name: "token", value: "abc123" },
+    },
+    { name: "cookie.clear", args: ["cookie.clear"], expectedTool: "cookie.clear" },
+
+    // Frame
+    { name: "frame.list", args: ["frame.list"], expectedTool: "frame.list" },
+    {
+      name: "frame.switch",
+      args: ["frame.switch", "--id", "frame-1"],
+      expectedTool: "frame.switch",
+      expectedArgs: { id: "frame-1" },
+    },
+    { name: "frame.main", args: ["frame.main"], expectedTool: "frame.main" },
+
+    // Emulation
+    {
+      name: "emulate.network",
+      args: ["emulate.network", "slow-3g"],
+      expectedTool: "emulate.network",
+      expectedArgs: { preset: "slow-3g" },
+    },
+    {
+      name: "emulate.device",
+      args: ["emulate.device", "iPhone 12"],
+      expectedTool: "emulate.device",
+      expectedArgs: { device: "iPhone 12" },
+    },
+    {
+      name: "emulate.cpu",
+      args: ["emulate.cpu", "4"],
+      expectedTool: "emulate.cpu",
+      expectedArgs: { rate: 4 },
+    },
+    {
+      name: "emulate.viewport",
+      args: ["emulate.viewport", "--width", "375", "--height", "812"],
+      expectedTool: "emulate.viewport",
+      expectedArgs: { width: 375, height: 812 },
+    },
+    { name: "emulate.touch", args: ["emulate.touch"], expectedTool: "emulate.touch" },
+
+    // History/Bookmark
+    { name: "history.list", args: ["history.list"], expectedTool: "history.list" },
+    {
+      name: "history.search",
+      args: ["history.search", "github"],
+      expectedTool: "history.search",
+      expectedArgs: { query: "github" },
+    },
+    { name: "bookmark.list", args: ["bookmark.list"], expectedTool: "bookmark.list" },
+
+    // Form
+    {
+      name: "form.fill",
+      args: ["form.fill", "--selector", "#email", "--value", "test@example.com"],
+      expectedTool: "form.fill",
+      expectedArgs: { selector: "#email", value: "test@example.com" },
+    },
+
+    // Search
+    {
+      name: "search",
+      args: ["search", "login button"],
+      expectedTool: "search",
+      expectedArgs: { term: "login button" },
+    },
+
+    // Performance
+    { name: "perf.metrics", args: ["perf.metrics"], expectedTool: "perf.metrics" },
+
+    // Health
+    {
+      name: "health with url",
+      args: ["health", "--url", "https://example.com"],
+      expectedTool: "health",
+      expectedArgs: { url: "https://example.com" },
+    },
+
+    // Zoom
+    {
+      name: "zoom --reset",
+      args: ["zoom", "--reset"],
+      expectedTool: "zoom",
+      expectedArgs: { reset: true },
+    },
+
+    // Global options
+    {
+      name: "--tab-id option",
+      args: ["go", "https://example.com", "--tab-id", "12345"],
+      expectedTool: "navigate",
+      expectedArgs: { url: "https://example.com" },
+      expectedGlobals: { tabId: 12345 },
+    },
+    {
+      name: "--window-id option",
+      args: ["go", "https://example.com", "--window-id", "67890"],
+      expectedTool: "navigate",
+      expectedArgs: { url: "https://example.com" },
+      expectedGlobals: { windowId: 67890 },
+    },
+  ];
+
+  it.each(commandTests)("$name", async (test) => {
+    const request = await runCliAndCapture(test.args);
 
     expect(request.type).toBe("tool_request");
-    expect(request.method).toBe("execute_tool");
-    expect(request.params.tool).toBe("navigate");
-    expect(request.params.args.url).toBe("https://example.com");
+    expect(request.params.tool).toBe(test.expectedTool);
+
+    if (test.expectedArgs) {
+      for (const [key, value] of Object.entries(test.expectedArgs)) {
+        expect(request.params.args[key]).toBe(value);
+      }
+    }
+
+    if (test.expectedGlobals?.tabId) {
+      expect(request.tabId).toBe(test.expectedGlobals.tabId);
+    }
+    if (test.expectedGlobals?.windowId) {
+      expect(request.windowId).toBe(test.expectedGlobals.windowId);
+    }
   });
 
-  it("sends click command with element reference", async () => {
-    const request = (await runCliAndCapture(["click", "e5"])) as {
-      type: string;
-      params: { tool: string; args: { ref: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("click");
-    expect(request.params.args.ref).toBe("e5");
-  });
-
-  it("exits with error when socket is not available", async () => {
-    // Don't start a server - socket file doesn't exist
-    const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
-      const cli = spawn("node", [CLI_PATH, "go", "https://example.com"]);
-      let stderr = "";
-
-      cli.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      cli.on("close", (code) => {
-        resolve({ code, stderr });
-      });
-    });
-
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Socket not found");
-  });
-
-  it("sends type command with text argument", async () => {
-    const request = (await runCliAndCapture(["type", "hello world"])) as {
-      type: string;
-      params: { tool: string; args: { text: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("type");
-    expect(request.params.args.text).toBe("hello world");
-  });
-
-  it("resolves snap alias to screenshot command", async () => {
-    const request = (await runCliAndCapture(["snap"], {
-      result: { base64: "abc123", width: 800, height: 600 },
-    })) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("screenshot");
-  });
-
-  it("includes tabId in request when --tab-id is provided", async () => {
-    const request = (await runCliAndCapture([
-      "go",
-      "https://example.com",
-      "--tab-id",
-      "12345",
-    ])) as {
-      type: string;
-      params: { tool: string };
-      tabId: number;
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("navigate");
-    expect(request.tabId).toBe(12345);
-  });
-
-  it("includes windowId in request when --window-id is provided", async () => {
-    const request = (await runCliAndCapture([
-      "go",
-      "https://example.com",
-      "--window-id",
-      "67890",
-    ])) as {
-      type: string;
-      params: { tool: string };
-      windowId: number;
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("navigate");
-    expect(request.windowId).toBe(67890);
-  });
-
-  it("resolves read alias to page.read command", async () => {
-    const request = (await runCliAndCapture(["read"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("page.read");
-  });
-
-  it("sends click command with x,y coordinates", async () => {
-    const request = (await runCliAndCapture(["click", "100", "200"])) as {
-      type: string;
-      params: { tool: string; args: { x: number; y: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("click");
-    expect(request.params.args.x).toBe(100);
-    expect(request.params.args.y).toBe(200);
-  });
-
-  it("sends namespaced tab.list command", async () => {
-    const request = (await runCliAndCapture(["tab.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.list");
-  });
-
-  it("sends click command with --selector option", async () => {
-    const request = (await runCliAndCapture(["click", "--selector", ".submit-btn"])) as {
-      type: string;
-      params: { tool: string; args: { selector: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("click");
-    expect(request.params.args.selector).toBe(".submit-btn");
-  });
-
-  it("sends js command with code argument", async () => {
-    const request = (await runCliAndCapture(["js", "return document.title"])) as {
-      type: string;
-      params: { tool: string; args: { code: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("js");
-    expect(request.params.args.code).toBe("return document.title");
-  });
-
-  it("sends window.new command with url and options", async () => {
-    const request = (await runCliAndCapture([
-      "window.new",
-      "https://example.com",
-      "--width",
-      "1280",
-      "--height",
-      "720",
-    ])) as {
-      type: string;
-      params: { tool: string; args: { url: string; width: number; height: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("window.new");
-    expect(request.params.args.url).toBe("https://example.com");
-    expect(request.params.args.width).toBe(1280);
-    expect(request.params.args.height).toBe(720);
-  });
-
-  it("sends window.new with --incognito boolean flag", async () => {
-    const request = (await runCliAndCapture(["window.new", "--incognito"])) as {
-      type: string;
-      params: { tool: string; args: { incognito: boolean } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("window.new");
-    expect(request.params.args.incognito).toBe(true);
-  });
-
-  it("sends scroll command with direction and amount", async () => {
-    const request = (await runCliAndCapture([
-      "scroll",
-      "--direction",
-      "down",
-      "--amount",
-      "3",
-    ])) as {
-      type: string;
-      params: { tool: string; args: { direction: string; amount: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("scroll");
-    expect(request.params.args.direction).toBe("down");
-    expect(request.params.args.amount).toBe(3);
-  });
-
-  it("sends wait.element command with selector and timeout", async () => {
-    const request = (await runCliAndCapture(["wait.element", "#result", "--timeout", "5000"])) as {
-      type: string;
-      params: { tool: string; args: { selector: string; timeout: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("wait.element");
-    expect(request.params.args.selector).toBe("#result");
-    expect(request.params.args.timeout).toBe(5000);
-  });
-
-  it("sends type command with --submit flag", async () => {
-    const request = (await runCliAndCapture(["type", "search query", "--submit"])) as {
-      type: string;
-      params: { tool: string; args: { text: string; submit: boolean } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("type");
-    expect(request.params.args.text).toBe("search query");
-    expect(request.params.args.submit).toBe(true);
-  });
-
-  it("resolves net alias to network command", async () => {
-    const request = (await runCliAndCapture(["net"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("network");
-  });
-
-  it("sends tab.new command with url", async () => {
-    const request = (await runCliAndCapture(["tab.new", "https://github.com"])) as {
-      type: string;
-      params: { tool: string; args: { url: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.new");
-    expect(request.params.args.url).toBe("https://github.com");
-  });
-
-  it("outputs error message when server returns error", async () => {
-    const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
-      const timeout = setTimeout(() => resolve({ code: 1, stderr: "timeout" }), 5000);
-
-      server = net.createServer((socket) => {
-        socket.on("data", () => {
-          // Return an error response
-          socket.write(
-            `${JSON.stringify({ error: { content: [{ text: "Element not found" }] } })}\n`,
-          );
-        });
-      });
-
-      server.listen(SOCKET_PATH, () => {
-        const cli = spawn("node", [CLI_PATH, "click", "e99"]);
+  // Special cases that need custom handling
+  describe("error handling", () => {
+    it("exits with error when socket is not available", async () => {
+      const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
+        const cli = spawn("node", [CLI_PATH, "go", "https://example.com"]);
         let stderr = "";
 
         cli.stderr.on("data", (chunk) => {
@@ -335,564 +440,43 @@ describe("CLI to Socket communication", () => {
         });
 
         cli.on("close", (code) => {
-          clearTimeout(timeout);
           resolve({ code, stderr });
         });
       });
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("Socket not found");
     });
 
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Element not found");
-  });
-
-  it("sends key command with key name", async () => {
-    const request = (await runCliAndCapture(["key", "Enter"])) as {
-      type: string;
-      params: { tool: string; args: { key: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("key");
-    expect(request.params.args.key).toBe("Enter");
-  });
-
-  it("sends console command", async () => {
-    const request = (await runCliAndCapture(["console"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("console");
-  });
-
-  it("sends back command", async () => {
-    const request = (await runCliAndCapture(["back"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("back");
-  });
-
-  it("sends forward command", async () => {
-    const request = (await runCliAndCapture(["forward"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("forward");
-  });
-
-  it("sends hover command with ref", async () => {
-    const request = (await runCliAndCapture(["hover", "--ref", "e3"])) as {
-      type: string;
-      params: { tool: string; args: { ref: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("hover");
-    expect(request.params.args.ref).toBe("e3");
-  });
-
-  it("sends drag command with coordinates", async () => {
-    const request = (await runCliAndCapture(["drag", "--from", "100,100", "--to", "200,200"])) as {
-      type: string;
-      params: { tool: string; args: { from: string; to: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("drag");
-    expect(request.params.args.from).toBe("100,100");
-    expect(request.params.args.to).toBe("200,200");
-  });
-
-  it("sends emulate.network command with preset", async () => {
-    const request = (await runCliAndCapture(["emulate.network", "slow-3g"])) as {
-      type: string;
-      params: { tool: string; args: { preset: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("emulate.network");
-    expect(request.params.args.preset).toBe("slow-3g");
-  });
-
-  it("sends frame.list command", async () => {
-    const request = (await runCliAndCapture(["frame.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("frame.list");
-  });
-
-  it("sends dialog.accept command with text", async () => {
-    const request = (await runCliAndCapture(["dialog.accept", "--text", "confirmed"])) as {
-      type: string;
-      params: { tool: string; args: { text: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("dialog.accept");
-    expect(request.params.args.text).toBe("confirmed");
-  });
-
-  it("sends cookie.list command", async () => {
-    const request = (await runCliAndCapture(["cookie.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("cookie.list");
-  });
-
-  it("sends tab.switch command with id", async () => {
-    const request = (await runCliAndCapture(["tab.switch", "12345"])) as {
-      type: string;
-      params: { tool: string; args: { id: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.switch");
-    expect(request.params.args.id).toBe(12345);
-  });
-
-  it("sends tab.close command with id", async () => {
-    const request = (await runCliAndCapture(["tab.close", "999"])) as {
-      type: string;
-      params: { tool: string; args: { id: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.close");
-    expect(request.params.args.id).toBe(999);
-  });
-
-  it("sends tab.name command with name", async () => {
-    const request = (await runCliAndCapture(["tab.name", "main-tab"])) as {
-      type: string;
-      params: { tool: string; args: { name: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.name");
-    expect(request.params.args.name).toBe("main-tab");
-  });
-
-  it("sends tab.reload command", async () => {
-    const request = (await runCliAndCapture(["tab.reload"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("tab.reload");
-  });
-
-  it("sends window.list command", async () => {
-    const request = (await runCliAndCapture(["window.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("window.list");
-  });
-
-  it("sends window.focus command with id", async () => {
-    const request = (await runCliAndCapture(["window.focus", "555"])) as {
-      type: string;
-      params: { tool: string; args: { id: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("window.focus");
-    expect(request.params.args.id).toBe(555);
-  });
-
-  it("sends window.close command with id", async () => {
-    const request = (await runCliAndCapture(["window.close", "777"])) as {
-      type: string;
-      params: { tool: string; args: { id: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("window.close");
-    expect(request.params.args.id).toBe(777);
-  });
-
-  it("sends scroll.to command with ref", async () => {
-    const request = (await runCliAndCapture(["scroll.to", "--ref", "e10"])) as {
-      type: string;
-      params: { tool: string; args: { ref: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("scroll.to");
-    expect(request.params.args.ref).toBe("e10");
-  });
-
-  it("sends scroll.top command", async () => {
-    const request = (await runCliAndCapture(["scroll.top"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("scroll.top");
-  });
-
-  it("sends scroll.bottom command", async () => {
-    const request = (await runCliAndCapture(["scroll.bottom"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("scroll.bottom");
-  });
-
-  it("sends wait.url command with pattern", async () => {
-    const request = (await runCliAndCapture(["wait.url", "/dashboard"])) as {
-      type: string;
-      params: { tool: string; args: { pattern: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("wait.url");
-    expect(request.params.args.pattern).toBe("/dashboard");
-  });
-
-  it("sends wait.network command", async () => {
-    const request = (await runCliAndCapture(["wait.network"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("wait.network");
-  });
-
-  it("sends wait.load command", async () => {
-    const request = (await runCliAndCapture(["wait.load"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("wait.load");
-  });
-
-  it("sends locate.role command with role and name", async () => {
-    const request = (await runCliAndCapture(["locate.role", "button", "--name", "Submit"])) as {
-      type: string;
-      params: { tool: string; args: { role: string; name: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("locate.role");
-    expect(request.params.args.role).toBe("button");
-    expect(request.params.args.name).toBe("Submit");
-  });
-
-  it("sends locate.text command with text", async () => {
-    const request = (await runCliAndCapture(["locate.text", "Sign In"])) as {
-      type: string;
-      params: { tool: string; args: { text: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("locate.text");
-    expect(request.params.args.text).toBe("Sign In");
-  });
-
-  it("sends page.text command", async () => {
-    const request = (await runCliAndCapture(["page.text"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("page.text");
-  });
-
-  it("sends network.get command with id", async () => {
-    const request = (await runCliAndCapture(["network.get", "req-123"])) as {
-      type: string;
-      params: { tool: string; args: { id: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("network.get");
-    expect(request.params.args.id).toBe("req-123");
-  });
-
-  it("sends network.body command with id", async () => {
-    const request = (await runCliAndCapture(["network.body", "req-456"])) as {
-      type: string;
-      params: { tool: string; args: { id: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("network.body");
-    expect(request.params.args.id).toBe("req-456");
-  });
-
-  it("sends network.clear command", async () => {
-    const request = (await runCliAndCapture(["network.clear"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("network.clear");
-  });
-
-  it("sends perf.metrics command", async () => {
-    const request = (await runCliAndCapture(["perf.metrics"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("perf.metrics");
-  });
-
-  it("sends health command with url option", async () => {
-    const request = (await runCliAndCapture(["health", "--url", "https://example.com"])) as {
-      type: string;
-      params: { tool: string; args: { url: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("health");
-    expect(request.params.args.url).toBe("https://example.com");
-  });
-
-  it("sends zoom command with --reset flag", async () => {
-    const request = (await runCliAndCapture(["zoom", "--reset"])) as {
-      type: string;
-      params: { tool: string; args: { reset: boolean } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("zoom");
-    expect(request.params.args.reset).toBe(true);
-  });
-
-  it("sends form.fill command with selector and value", async () => {
-    const request = (await runCliAndCapture([
-      "form.fill",
-      "--selector",
-      "#email",
-      "--value",
-      "test@example.com",
-    ])) as {
-      type: string;
-      params: { tool: string; args: { selector: string; value: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("form.fill");
-    expect(request.params.args.selector).toBe("#email");
-    expect(request.params.args.value).toBe("test@example.com");
-  });
-
-  it("sends search command with term", async () => {
-    const request = (await runCliAndCapture(["search", "login button"])) as {
-      type: string;
-      params: { tool: string; args: { term: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("search");
-    expect(request.params.args.term).toBe("login button");
-  });
-
-  it("resolves find alias to search command", async () => {
-    const request = (await runCliAndCapture(["find", "submit"])) as {
-      type: string;
-      params: { tool: string; args: { term: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("search");
-    expect(request.params.args.term).toBe("submit");
-  });
-
-  it("sends dialog.dismiss command", async () => {
-    const request = (await runCliAndCapture(["dialog.dismiss"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("dialog.dismiss");
-  });
-
-  it("sends dialog.info command", async () => {
-    const request = (await runCliAndCapture(["dialog.info"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("dialog.info");
-  });
-
-  it("sends page.state command", async () => {
-    const request = (await runCliAndCapture(["page.state"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("page.state");
-  });
-
-  it("sends emulate.device command with device name", async () => {
-    const request = (await runCliAndCapture(["emulate.device", "iPhone 12"])) as {
-      type: string;
-      params: { tool: string; args: { device: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("emulate.device");
-    expect(request.params.args.device).toBe("iPhone 12");
-  });
-
-  it("sends frame.switch command with frame id", async () => {
-    const request = (await runCliAndCapture(["frame.switch", "--id", "frame-1"])) as {
-      type: string;
-      params: { tool: string; args: { id: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("frame.switch");
-    expect(request.params.args.id).toBe("frame-1");
-  });
-
-  it("sends frame.main command", async () => {
-    const request = (await runCliAndCapture(["frame.main"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("frame.main");
-  });
-
-  it("sends history.search command with query", async () => {
-    const request = (await runCliAndCapture(["history.search", "github"])) as {
-      type: string;
-      params: { tool: string; args: { query: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("history.search");
-    expect(request.params.args.query).toBe("github");
-  });
-
-  it("sends history.list command", async () => {
-    const request = (await runCliAndCapture(["history.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("history.list");
-  });
-
-  it("sends bookmark.list command", async () => {
-    const request = (await runCliAndCapture(["bookmark.list"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("bookmark.list");
-  });
-
-  it("sends cookie.get command with name", async () => {
-    const request = (await runCliAndCapture(["cookie.get", "--name", "session"])) as {
-      type: string;
-      params: { tool: string; args: { name: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("cookie.get");
-    expect(request.params.args.name).toBe("session");
-  });
-
-  it("sends cookie.set command with name and value", async () => {
-    const request = (await runCliAndCapture([
-      "cookie.set",
-      "--name",
-      "token",
-      "--value",
-      "abc123",
-    ])) as {
-      type: string;
-      params: { tool: string; args: { name: string; value: string } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("cookie.set");
-    expect(request.params.args.name).toBe("token");
-    expect(request.params.args.value).toBe("abc123");
-  });
-
-  it("sends cookie.clear command", async () => {
-    const request = (await runCliAndCapture(["cookie.clear"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("cookie.clear");
-  });
-
-  it("sends emulate.cpu command with rate", async () => {
-    const request = (await runCliAndCapture(["emulate.cpu", "4"])) as {
-      type: string;
-      params: { tool: string; args: { rate: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("emulate.cpu");
-    expect(request.params.args.rate).toBe(4);
-  });
-
-  it("sends emulate.viewport command with dimensions", async () => {
-    const request = (await runCliAndCapture([
-      "emulate.viewport",
-      "--width",
-      "375",
-      "--height",
-      "812",
-    ])) as {
-      type: string;
-      params: { tool: string; args: { width: number; height: number } };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("emulate.viewport");
-    expect(request.params.args.width).toBe(375);
-    expect(request.params.args.height).toBe(812);
-  });
-
-  it("sends emulate.touch command", async () => {
-    const request = (await runCliAndCapture(["emulate.touch"])) as {
-      type: string;
-      params: { tool: string };
-    };
-
-    expect(request.type).toBe("tool_request");
-    expect(request.params.tool).toBe("emulate.touch");
+    it("outputs error message when server returns error", async () => {
+      const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
+        const timeout = setTimeout(() => resolve({ code: 1, stderr: "timeout" }), 5000);
+
+        server = net.createServer((socket) => {
+          socket.on("data", () => {
+            socket.write(
+              `${JSON.stringify({ error: { content: [{ text: "Element not found" }] } })}\n`,
+            );
+          });
+        });
+
+        server.listen(SOCKET_PATH, () => {
+          const cli = spawn("node", [CLI_PATH, "click", "e99"]);
+          let stderr = "";
+
+          cli.stderr.on("data", (chunk) => {
+            stderr += chunk.toString();
+          });
+
+          cli.on("close", (code) => {
+            clearTimeout(timeout);
+            resolve({ code, stderr });
+          });
+        });
+      });
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("Element not found");
+    });
   });
 });
