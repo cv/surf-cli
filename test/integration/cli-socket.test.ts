@@ -406,6 +406,55 @@ describe("CLI to Socket communication", () => {
       expectedArgs: { url: "https://example.com" },
       expectedGlobals: { windowId: 67890 },
     },
+
+    // Additional commands
+    {
+      name: "locate.label",
+      args: ["locate.label", "Email"],
+      expectedTool: "locate.label",
+      expectedArgs: { label: "Email" },
+    },
+    { name: "tab.named", args: ["tab.named"], expectedTool: "tab.named" },
+    {
+      name: "tab.unname",
+      args: ["tab.unname", "my-tab"],
+      expectedTool: "tab.unname",
+      expectedArgs: { name: "my-tab" },
+    },
+    { name: "perf.start", args: ["perf.start"], expectedTool: "perf.start" },
+    { name: "perf.stop", args: ["perf.stop"], expectedTool: "perf.stop" },
+    { name: "network.stats", args: ["network.stats"], expectedTool: "network.stats" },
+    { name: "network.origins", args: ["network.origins"], expectedTool: "network.origins" },
+    {
+      name: "network.curl",
+      args: ["network.curl", "req-789"],
+      expectedTool: "network.curl",
+      expectedArgs: { id: "req-789" },
+    },
+    {
+      name: "bookmark.add",
+      args: ["bookmark.add", "--title", "My Page"],
+      expectedTool: "bookmark.add",
+      expectedArgs: { title: "My Page" },
+    },
+    {
+      name: "bookmark.remove",
+      args: ["bookmark.remove", "--id", "abc"],
+      expectedTool: "bookmark.remove",
+      expectedArgs: { id: "abc" },
+    },
+    {
+      name: "emulate.geo with --clear",
+      args: ["emulate.geo", "--clear"],
+      expectedTool: "emulate.geo",
+      expectedArgs: { clear: true },
+    },
+    {
+      name: "frame.js",
+      args: ["frame.js", "return 1+1", "--frame", "iframe-1"],
+      expectedTool: "frame.js",
+      expectedArgs: { code: "return 1+1", frame: "iframe-1" },
+    },
   ];
 
   it.each(commandTests)("$name", async (test) => {
