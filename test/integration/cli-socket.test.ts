@@ -385,4 +385,38 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("forward");
   });
+
+  it("sends hover command with ref", async () => {
+    const request = (await runCliAndCapture(["hover", "--ref", "e3"])) as {
+      type: string;
+      params: { tool: string; args: { ref: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("hover");
+    expect(request.params.args.ref).toBe("e3");
+  });
+
+  it("sends drag command with coordinates", async () => {
+    const request = (await runCliAndCapture(["drag", "--from", "100,100", "--to", "200,200"])) as {
+      type: string;
+      params: { tool: string; args: { from: string; to: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("drag");
+    expect(request.params.args.from).toBe("100,100");
+    expect(request.params.args.to).toBe("200,200");
+  });
+
+  it("sends emulate.network command with preset", async () => {
+    const request = (await runCliAndCapture(["emulate.network", "slow-3g"])) as {
+      type: string;
+      params: { tool: string; args: { preset: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("emulate.network");
+    expect(request.params.args.preset).toBe("slow-3g");
+  });
 });
