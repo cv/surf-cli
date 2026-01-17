@@ -525,4 +525,35 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("window.close");
     expect(request.params.args.id).toBe(777);
   });
+
+  it("sends scroll.to command with ref", async () => {
+    const request = (await runCliAndCapture(["scroll.to", "--ref", "e10"])) as {
+      type: string;
+      params: { tool: string; args: { ref: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("scroll.to");
+    expect(request.params.args.ref).toBe("e10");
+  });
+
+  it("sends scroll.top command", async () => {
+    const request = (await runCliAndCapture(["scroll.top"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("scroll.top");
+  });
+
+  it("sends scroll.bottom command", async () => {
+    const request = (await runCliAndCapture(["scroll.bottom"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("scroll.bottom");
+  });
 });
