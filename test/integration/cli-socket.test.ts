@@ -587,4 +587,37 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("wait.load");
   });
+
+  it("sends locate.role command with role and name", async () => {
+    const request = (await runCliAndCapture(["locate.role", "button", "--name", "Submit"])) as {
+      type: string;
+      params: { tool: string; args: { role: string; name: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("locate.role");
+    expect(request.params.args.role).toBe("button");
+    expect(request.params.args.name).toBe("Submit");
+  });
+
+  it("sends locate.text command with text", async () => {
+    const request = (await runCliAndCapture(["locate.text", "Sign In"])) as {
+      type: string;
+      params: { tool: string; args: { text: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("locate.text");
+    expect(request.params.args.text).toBe("Sign In");
+  });
+
+  it("sends page.text command", async () => {
+    const request = (await runCliAndCapture(["page.text"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("page.text");
+  });
 });
