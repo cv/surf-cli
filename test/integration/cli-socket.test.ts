@@ -279,4 +279,16 @@ describe("CLI to Socket communication", () => {
     expect(request.params.args.selector).toBe("#result");
     expect(request.params.args.timeout).toBe(5000);
   });
+
+  it("sends type command with --submit flag", async () => {
+    const request = (await runCliAndCapture(["type", "search query", "--submit"])) as {
+      type: string;
+      params: { tool: string; args: { text: string; submit: boolean } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("type");
+    expect(request.params.args.text).toBe("search query");
+    expect(request.params.args.submit).toBe(true);
+  });
 });
