@@ -493,4 +493,36 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("tab.reload");
   });
+
+  it("sends window.list command", async () => {
+    const request = (await runCliAndCapture(["window.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("window.list");
+  });
+
+  it("sends window.focus command with id", async () => {
+    const request = (await runCliAndCapture(["window.focus", "555"])) as {
+      type: string;
+      params: { tool: string; args: { id: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("window.focus");
+    expect(request.params.args.id).toBe(555);
+  });
+
+  it("sends window.close command with id", async () => {
+    const request = (await runCliAndCapture(["window.close", "777"])) as {
+      type: string;
+      params: { tool: string; args: { id: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("window.close");
+    expect(request.params.args.id).toBe(777);
+  });
 });
