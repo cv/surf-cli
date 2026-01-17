@@ -856,4 +856,43 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("cookie.clear");
   });
+
+  it("sends emulate.cpu command with rate", async () => {
+    const request = (await runCliAndCapture(["emulate.cpu", "4"])) as {
+      type: string;
+      params: { tool: string; args: { rate: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("emulate.cpu");
+    expect(request.params.args.rate).toBe(4);
+  });
+
+  it("sends emulate.viewport command with dimensions", async () => {
+    const request = (await runCliAndCapture([
+      "emulate.viewport",
+      "--width",
+      "375",
+      "--height",
+      "812",
+    ])) as {
+      type: string;
+      params: { tool: string; args: { width: number; height: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("emulate.viewport");
+    expect(request.params.args.width).toBe(375);
+    expect(request.params.args.height).toBe(812);
+  });
+
+  it("sends emulate.touch command", async () => {
+    const request = (await runCliAndCapture(["emulate.touch"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("emulate.touch");
+  });
 });
