@@ -312,4 +312,36 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("tab.new");
     expect(request.params.args.url).toBe("https://github.com");
   });
+
+  it("outputs error message when server returns error", async () => {
+    const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
+      const timeout = setTimeout(() => resolve({ code: 1, stderr: "timeout" }), 5000);
+
+      server = net.createServer((socket) => {
+        socket.on("data", () => {
+          // Return an error response
+          socket.write(
+            `${JSON.stringify({ error: { content: [{ text: "Element not found" }] } })}\n`,
+          );
+        });
+      });
+
+      server.listen(SOCKET_PATH, () => {
+        const cli = spawn("node", [CLI_PATH, "click", "e99"]);
+        let stderr = "";
+
+        cli.stderr.on("data", (chunk) => {
+          stderr += chunk.toString();
+        });
+
+        cli.on("close", (code) => {
+          clearTimeout(timeout);
+          resolve({ code, stderr });
+        });
+      });
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Element not found");
+  });
 });
