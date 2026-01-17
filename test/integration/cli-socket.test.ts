@@ -620,4 +620,36 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("page.text");
   });
+
+  it("sends network.get command with id", async () => {
+    const request = (await runCliAndCapture(["network.get", "req-123"])) as {
+      type: string;
+      params: { tool: string; args: { id: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("network.get");
+    expect(request.params.args.id).toBe("req-123");
+  });
+
+  it("sends network.body command with id", async () => {
+    const request = (await runCliAndCapture(["network.body", "req-456"])) as {
+      type: string;
+      params: { tool: string; args: { id: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("network.body");
+    expect(request.params.args.id).toBe("req-456");
+  });
+
+  it("sends network.clear command", async () => {
+    const request = (await runCliAndCapture(["network.clear"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("network.clear");
+  });
 });
