@@ -174,4 +174,16 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("page.read");
   });
+
+  it("sends click command with x,y coordinates", async () => {
+    const request = (await runCliAndCapture(["click", "100", "200"])) as {
+      type: string;
+      params: { tool: string; args: { x: number; y: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("click");
+    expect(request.params.args.x).toBe(100);
+    expect(request.params.args.y).toBe(200);
+  });
 });
