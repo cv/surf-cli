@@ -754,4 +754,36 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("page.state");
   });
+
+  it("sends emulate.device command with device name", async () => {
+    const request = (await runCliAndCapture(["emulate.device", "iPhone 12"])) as {
+      type: string;
+      params: { tool: string; args: { device: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("emulate.device");
+    expect(request.params.args.device).toBe("iPhone 12");
+  });
+
+  it("sends frame.switch command with frame id", async () => {
+    const request = (await runCliAndCapture(["frame.switch", "--id", "frame-1"])) as {
+      type: string;
+      params: { tool: string; args: { id: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("frame.switch");
+    expect(request.params.args.id).toBe("frame-1");
+  });
+
+  it("sends frame.main command", async () => {
+    const request = (await runCliAndCapture(["frame.main"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("frame.main");
+  });
 });
