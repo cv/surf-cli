@@ -249,4 +249,22 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("window.new");
     expect(request.params.args.incognito).toBe(true);
   });
+
+  it("sends scroll command with direction and amount", async () => {
+    const request = (await runCliAndCapture([
+      "scroll",
+      "--direction",
+      "down",
+      "--amount",
+      "3",
+    ])) as {
+      type: string;
+      params: { tool: string; args: { direction: string; amount: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("scroll");
+    expect(request.params.args.direction).toBe("down");
+    expect(request.params.args.amount).toBe(3);
+  });
 });
