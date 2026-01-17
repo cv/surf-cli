@@ -70,4 +70,35 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("navigate");
     expect(request.params.args.url).toBe("https://example.com");
   });
+
+  it("sends click command with element reference", async () => {
+    const receivedData = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+
+      server = net.createServer((socket) => {
+        let data = "";
+        socket.on("data", (chunk) => {
+          data += chunk.toString();
+          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
+        });
+        socket.on("close", () => {
+          clearTimeout(timeout);
+          resolve(data);
+        });
+      });
+
+      server.listen(SOCKET_PATH, () => {
+        const cli = spawn("node", [CLI_PATH, "click", "e5"]);
+        cli.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+    });
+
+    const request = JSON.parse(receivedData.trim());
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("click");
+    expect(request.params.args.ref).toBe("e5");
+  });
 });
