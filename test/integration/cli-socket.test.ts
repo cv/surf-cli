@@ -164,4 +164,14 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("navigate");
     expect(request.windowId).toBe(67890);
   });
+
+  it("resolves read alias to page.read command", async () => {
+    const request = (await runCliAndCapture(["read"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("page.read");
+  });
 });
