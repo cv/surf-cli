@@ -291,4 +291,14 @@ describe("CLI to Socket communication", () => {
     expect(request.params.args.text).toBe("search query");
     expect(request.params.args.submit).toBe(true);
   });
+
+  it("resolves net alias to network command", async () => {
+    const request = (await runCliAndCapture(["net"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("network");
+  });
 });
