@@ -207,4 +207,15 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("click");
     expect(request.params.args.selector).toBe(".submit-btn");
   });
+
+  it("sends js command with code argument", async () => {
+    const request = (await runCliAndCapture(["js", "return document.title"])) as {
+      type: string;
+      params: { tool: string; args: { code: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("js");
+    expect(request.params.args.code).toBe("return document.title");
+  });
 });
