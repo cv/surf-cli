@@ -301,4 +301,15 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("network");
   });
+
+  it("sends tab.new command with url", async () => {
+    const request = (await runCliAndCapture(["tab.new", "https://github.com"])) as {
+      type: string;
+      params: { tool: string; args: { url: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.new");
+    expect(request.params.args.url).toBe("https://github.com");
+  });
 });
