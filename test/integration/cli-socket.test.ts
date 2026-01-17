@@ -186,4 +186,14 @@ describe("CLI to Socket communication", () => {
     expect(request.params.args.x).toBe(100);
     expect(request.params.args.y).toBe(200);
   });
+
+  it("sends namespaced tab.list command", async () => {
+    const request = (await runCliAndCapture(["tab.list"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("tab.list");
+  });
 });
