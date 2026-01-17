@@ -652,4 +652,36 @@ describe("CLI to Socket communication", () => {
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("network.clear");
   });
+
+  it("sends perf.metrics command", async () => {
+    const request = (await runCliAndCapture(["perf.metrics"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("perf.metrics");
+  });
+
+  it("sends health command with url option", async () => {
+    const request = (await runCliAndCapture(["health", "--url", "https://example.com"])) as {
+      type: string;
+      params: { tool: string; args: { url: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("health");
+    expect(request.params.args.url).toBe("https://example.com");
+  });
+
+  it("sends zoom command with --reset flag", async () => {
+    const request = (await runCliAndCapture(["zoom", "--reset"])) as {
+      type: string;
+      params: { tool: string; args: { reset: boolean } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("zoom");
+    expect(request.params.args.reset).toBe(true);
+  });
 });
