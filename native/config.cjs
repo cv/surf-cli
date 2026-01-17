@@ -8,6 +8,9 @@ let cachedConfig = null;
 let cachedConfigPath = null;
 
 const STARTER_CONFIG = {
+  // Set to false to disable auto-saving screenshots to /tmp
+  // When disabled, screenshots return base64 + ID instead of file path
+  autoSaveScreenshots: true,
   routes: {
     main: ["http://localhost:3000"]
   },

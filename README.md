@@ -170,15 +170,19 @@ surf scroll.bottom                  # Scroll to bottom
 
 ### Screenshots
 
-Screenshots are optimized for AI consumption by default:
+Screenshots auto-save to `/tmp` by default (optimized for AI agents):
 
 ```bash
-surf screenshot --output /tmp/shot.png      # Auto-resized to 1200px max
-surf screenshot --full --output /tmp/hd.png # Full resolution
-surf screenshot --annotate --output /tmp/labeled.png  # With element labels
-surf screenshot --fullpage --output /tmp/full.png     # Entire page
-surf snap                                   # Quick save to /tmp
+surf screenshot                             # Auto-saves to /tmp/surf-snap-*.png
+surf screenshot --output /tmp/shot.png      # Save to specific path
+surf screenshot --full --output /tmp/hd.png # Full resolution (skip resize)
+surf screenshot --annotate                  # With element labels
+surf screenshot --fullpage                  # Entire page
+surf screenshot --no-save                   # Return base64 + ID only (no file)
+surf snap                                   # Alias for screenshot
 ```
+
+To disable auto-save globally, set `autoSaveScreenshots: false` in `surf.json`.
 
 Actions like `click`, `type`, and `scroll` automatically capture a screenshot after execution - no extra command needed.
 

@@ -84,7 +84,17 @@ function formatToolContent(result, log = () => {}) {
     return text(result.output);
   }
 
-  if (result.screenshotId) {
+  // Screenshot saved to file (has path but no base64)
+  if (result.path && result.message && !result.base64) {
+    let msg = result.message;
+    if (result.screenshotId) {
+      msg += `\n[Screenshot ID: ${result.screenshotId} - use with upload_image]`;
+    }
+    return text(msg);
+  }
+
+  // Screenshot with inline base64 (MCP flow or no savePath)
+  if (result.screenshotId && result.base64) {
     const dims = result.width && result.height 
       ? `${result.width}x${result.height}` 
       : "unknown dimensions";
@@ -489,7 +499,7 @@ function mapToolToMessage(tool, args, tabId) {
     case "screenshot":
       return { 
         type: "EXECUTE_SCREENSHOT", 
-        savePath: a.savePath,
+        savePath: a.savePath || a.output,  // Accept both savePath (CLI) and output (MCP)
         annotate: a.annotate || false,
         fullpage: a.fullpage || false,
         maxHeight: a["max-height"] || 4000,

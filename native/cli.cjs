@@ -234,7 +234,7 @@ const TOOLS = {
         examples: [{ cmd: "forward", desc: "Browser forward" }]
       },
       "screenshot": { 
-        desc: "Capture screenshot (auto-resized for LLM by default)", 
+        desc: "Capture screenshot (auto-saves to /tmp by default)", 
         args: [], 
         opts: { 
           output: "Save to file", 
@@ -243,14 +243,15 @@ const TOOLS = {
           fullpage: "Capture full page", 
           "max-height": "Max height for fullpage (default: 4000)",
           full: "Skip resize, save at full resolution",
-          "max-size": "Max dimension in px (default: 1200)" 
+          "max-size": "Max dimension in px (default: 1200)",
+          "no-save": "Don't auto-save, return base64 + ID (saves context)"
         },
         examples: [
-          { cmd: "screenshot --output /tmp/shot.png", desc: "Save to file (auto-resized)" },
-          { cmd: "screenshot --full --output /tmp/shot.png", desc: "Full resolution" },
-          { cmd: "screenshot --max-size 800 --output /tmp/small.png", desc: "Custom max size" },
-          { cmd: "screenshot --annotate --output /tmp/annotated.png", desc: "With element labels" },
-          { cmd: "snap", desc: "Auto-save to /tmp (resized)" },
+          { cmd: "screenshot", desc: "Auto-save to /tmp (default)" },
+          { cmd: "screenshot --output /tmp/shot.png", desc: "Save to specific file" },
+          { cmd: "screenshot --no-save", desc: "Return base64 without saving" },
+          { cmd: "screenshot --annotate", desc: "With element labels" },
+          { cmd: "snap", desc: "Alias for screenshot" },
         ]
       },
       "snap": { desc: "Alias for screenshot (auto-saves to /tmp)", args: [], alias: "screenshot" },
@@ -1672,7 +1673,7 @@ if (args.includes("--script")) {
   return;
 }
 
-const BOOLEAN_FLAGS = ["auto-capture", "json", "stream", "dry-run", "stop-on-error", "fail-fast", "clear", "submit", "all", "case-sensitive", "hard", "annotate", "fullpage", "reset", "no-screenshot", "full", "soft-fail", "has-body", "exclude-static", "v", "vv", "request", "by-tab", "har", "jsonl"];
+const BOOLEAN_FLAGS = ["auto-capture", "json", "stream", "dry-run", "stop-on-error", "fail-fast", "clear", "submit", "all", "case-sensitive", "hard", "annotate", "fullpage", "reset", "no-screenshot", "full", "soft-fail", "has-body", "exclude-static", "v", "vv", "request", "by-tab", "har", "jsonl", "no-save"];
 
 const AUTO_SCREENSHOT_TOOLS = ["click", "type", "key", "smart_type", "form.fill", "form_input", "drag", "hover", "scroll", "scroll.top", "scroll.bottom", "scroll.to", "dialog.accept", "dialog.dismiss", "js", "eval"];
 
@@ -1727,10 +1728,14 @@ if (REMOVED_COMMANDS[tool]) {
   process.exit(1);
 }
 
-const wasSnap = tool === "snap";
 tool = ALIASES[tool] || tool;
 
-if (wasSnap && !options.output && !options.savePath) {
+// Auto-save screenshots to temp file when no --output specified
+// This ensures agents always get a usable file path, not just an in-memory ID
+// Can be disabled with --no-save flag or autoSaveScreenshots: false in surf.json
+const config = loadConfig();
+const autoSaveEnabled = config.autoSaveScreenshots !== false && !options["no-save"];
+if (tool === "screenshot" && !options.output && !options.savePath && autoSaveEnabled) {
   options.savePath = `/tmp/surf-snap-${Date.now()}.png`;
 }
 
@@ -1887,7 +1892,7 @@ if (!noScreenshot && AUTO_SCREENSHOT_TOOLS.includes(tool)) {
 const outputPath = toolArgs.output;
 delete toolArgs.output;
 
-if ((tool === "screenshot" || tool === "snap") && outputPath) {
+if (tool === "screenshot" && outputPath) {
   if (typeof outputPath !== "string") {
     console.error("Error: --output requires a file path");
     process.exit(1);
@@ -2208,7 +2213,7 @@ async function handleResponse(response) {
     process.exit(0);
   }
 
-  if ((tool === "screenshot" || tool === "snap") && data?.base64 && (outputPath || toolArgs.savePath)) {
+  if (tool === "screenshot" && data?.base64 && (outputPath || toolArgs.savePath)) {
     const saveTo = outputPath || toolArgs.savePath;
     fs.writeFileSync(saveTo, Buffer.from(data.base64, "base64"));
     
@@ -2227,8 +2232,11 @@ async function handleResponse(response) {
     } else {
       console.log(`Saved to ${saveTo} (${origWidth}x${origHeight})`);
     }
-  } else if ((tool === "screenshot" || tool === "snap") && data?.message) {
+  } else if (tool === "screenshot" && data?.message) {
     console.log(data.message);
+    if (data.screenshotId) {
+      console.log(`[Screenshot ID: ${data.screenshotId}]`);
+    }
   } else if (tool === "tab.list") {
     const tabs = data?.tabs || data || [];
     if (Array.isArray(tabs)) {
