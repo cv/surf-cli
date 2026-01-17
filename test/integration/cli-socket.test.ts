@@ -355,4 +355,34 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("key");
     expect(request.params.args.key).toBe("Enter");
   });
+
+  it("sends console command", async () => {
+    const request = (await runCliAndCapture(["console"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("console");
+  });
+
+  it("sends back command", async () => {
+    const request = (await runCliAndCapture(["back"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("back");
+  });
+
+  it("sends forward command", async () => {
+    const request = (await runCliAndCapture(["forward"])) as {
+      type: string;
+      params: { tool: string };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("forward");
+  });
 });
