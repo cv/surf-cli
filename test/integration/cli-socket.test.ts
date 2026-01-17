@@ -684,4 +684,44 @@ describe("CLI to Socket communication", () => {
     expect(request.params.tool).toBe("zoom");
     expect(request.params.args.reset).toBe(true);
   });
+
+  it("sends form.fill command with selector and value", async () => {
+    const request = (await runCliAndCapture([
+      "form.fill",
+      "--selector",
+      "#email",
+      "--value",
+      "test@example.com",
+    ])) as {
+      type: string;
+      params: { tool: string; args: { selector: string; value: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("form.fill");
+    expect(request.params.args.selector).toBe("#email");
+    expect(request.params.args.value).toBe("test@example.com");
+  });
+
+  it("sends search command with term", async () => {
+    const request = (await runCliAndCapture(["search", "login button"])) as {
+      type: string;
+      params: { tool: string; args: { term: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("search");
+    expect(request.params.args.term).toBe("login button");
+  });
+
+  it("resolves find alias to search command", async () => {
+    const request = (await runCliAndCapture(["find", "submit"])) as {
+      type: string;
+      params: { tool: string; args: { term: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("search");
+    expect(request.params.args.term).toBe("submit");
+  });
 });
