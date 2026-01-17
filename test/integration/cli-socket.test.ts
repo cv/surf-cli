@@ -35,36 +35,43 @@ describe("CLI to Socket communication", () => {
     }
   });
 
-  it("sends navigate command as tool_request to socket", async () => {
-    // Create a mock socket server that captures the request
-    const receivedData = await new Promise<string>((resolve, reject) => {
+  // Helper to run CLI and capture the request sent to socket
+  const runCliAndCapture = (
+    args: string[],
+    response: object = { result: { success: true } },
+  ): Promise<object> => {
+    return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
 
       server = net.createServer((socket) => {
         let data = "";
         socket.on("data", (chunk) => {
           data += chunk.toString();
-          // Send a response so CLI doesn't hang
-          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
+          socket.write(`${JSON.stringify(response)}\n`);
         });
         socket.on("close", () => {
           clearTimeout(timeout);
-          resolve(data);
+          resolve(JSON.parse(data.trim()));
         });
       });
 
       server.listen(SOCKET_PATH, () => {
-        // Run CLI command
-        const cli = spawn("node", [CLI_PATH, "go", "https://example.com"]);
-
+        const cli = spawn("node", [CLI_PATH, ...args]);
         cli.on("error", (err) => {
           clearTimeout(timeout);
           reject(err);
         });
       });
     });
+  };
 
-    const request = JSON.parse(receivedData.trim());
+  it("sends navigate command as tool_request to socket", async () => {
+    const request = (await runCliAndCapture(["go", "https://example.com"])) as {
+      type: string;
+      method: string;
+      params: { tool: string; args: { url: string } };
+    };
+
     expect(request.type).toBe("tool_request");
     expect(request.method).toBe("execute_tool");
     expect(request.params.tool).toBe("navigate");
@@ -72,31 +79,11 @@ describe("CLI to Socket communication", () => {
   });
 
   it("sends click command with element reference", async () => {
-    const receivedData = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+    const request = (await runCliAndCapture(["click", "e5"])) as {
+      type: string;
+      params: { tool: string; args: { ref: string } };
+    };
 
-      server = net.createServer((socket) => {
-        let data = "";
-        socket.on("data", (chunk) => {
-          data += chunk.toString();
-          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
-        });
-        socket.on("close", () => {
-          clearTimeout(timeout);
-          resolve(data);
-        });
-      });
-
-      server.listen(SOCKET_PATH, () => {
-        const cli = spawn("node", [CLI_PATH, "click", "e5"]);
-        cli.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-      });
-    });
-
-    const request = JSON.parse(receivedData.trim());
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("click");
     expect(request.params.args.ref).toBe("e5");
@@ -122,97 +109,59 @@ describe("CLI to Socket communication", () => {
   });
 
   it("sends type command with text argument", async () => {
-    const receivedData = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+    const request = (await runCliAndCapture(["type", "hello world"])) as {
+      type: string;
+      params: { tool: string; args: { text: string } };
+    };
 
-      server = net.createServer((socket) => {
-        let data = "";
-        socket.on("data", (chunk) => {
-          data += chunk.toString();
-          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
-        });
-        socket.on("close", () => {
-          clearTimeout(timeout);
-          resolve(data);
-        });
-      });
-
-      server.listen(SOCKET_PATH, () => {
-        const cli = spawn("node", [CLI_PATH, "type", "hello world"]);
-        cli.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-      });
-    });
-
-    const request = JSON.parse(receivedData.trim());
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("type");
     expect(request.params.args.text).toBe("hello world");
   });
 
   it("resolves snap alias to screenshot command", async () => {
-    const receivedData = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+    const request = (await runCliAndCapture(["snap"], {
+      result: { base64: "abc123", width: 800, height: 600 },
+    })) as {
+      type: string;
+      params: { tool: string };
+    };
 
-      server = net.createServer((socket) => {
-        let data = "";
-        socket.on("data", (chunk) => {
-          data += chunk.toString();
-          // Return a screenshot-like response
-          socket.write(
-            `${JSON.stringify({ result: { base64: "abc123", width: 800, height: 600 } })}\n`,
-          );
-        });
-        socket.on("close", () => {
-          clearTimeout(timeout);
-          resolve(data);
-        });
-      });
-
-      server.listen(SOCKET_PATH, () => {
-        const cli = spawn("node", [CLI_PATH, "snap"]);
-        cli.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-      });
-    });
-
-    const request = JSON.parse(receivedData.trim());
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("screenshot");
   });
 
   it("includes tabId in request when --tab-id is provided", async () => {
-    const receivedData = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
+    const request = (await runCliAndCapture([
+      "go",
+      "https://example.com",
+      "--tab-id",
+      "12345",
+    ])) as {
+      type: string;
+      params: { tool: string };
+      tabId: number;
+    };
 
-      server = net.createServer((socket) => {
-        let data = "";
-        socket.on("data", (chunk) => {
-          data += chunk.toString();
-          socket.write(`${JSON.stringify({ result: { success: true } })}\n`);
-        });
-        socket.on("close", () => {
-          clearTimeout(timeout);
-          resolve(data);
-        });
-      });
-
-      server.listen(SOCKET_PATH, () => {
-        const cli = spawn("node", [CLI_PATH, "go", "https://example.com", "--tab-id", "12345"]);
-        cli.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-      });
-    });
-
-    const request = JSON.parse(receivedData.trim());
     expect(request.type).toBe("tool_request");
     expect(request.params.tool).toBe("navigate");
     expect(request.tabId).toBe(12345);
+  });
+
+  it("includes windowId in request when --window-id is provided", async () => {
+    const request = (await runCliAndCapture([
+      "go",
+      "https://example.com",
+      "--window-id",
+      "67890",
+    ])) as {
+      type: string;
+      params: { tool: string };
+      windowId: number;
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("navigate");
+    expect(request.windowId).toBe(67890);
   });
 });
