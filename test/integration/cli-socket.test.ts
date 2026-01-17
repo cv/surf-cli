@@ -267,4 +267,16 @@ describe("CLI to Socket communication", () => {
     expect(request.params.args.direction).toBe("down");
     expect(request.params.args.amount).toBe(3);
   });
+
+  it("sends wait.element command with selector and timeout", async () => {
+    const request = (await runCliAndCapture(["wait.element", "#result", "--timeout", "5000"])) as {
+      type: string;
+      params: { tool: string; args: { selector: string; timeout: number } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("wait.element");
+    expect(request.params.args.selector).toBe("#result");
+    expect(request.params.args.timeout).toBe(5000);
+  });
 });
