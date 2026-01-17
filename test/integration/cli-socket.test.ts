@@ -344,4 +344,15 @@ describe("CLI to Socket communication", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("Element not found");
   });
+
+  it("sends key command with key name", async () => {
+    const request = (await runCliAndCapture(["key", "Enter"])) as {
+      type: string;
+      params: { tool: string; args: { key: string } };
+    };
+
+    expect(request.type).toBe("tool_request");
+    expect(request.params.tool).toBe("key");
+    expect(request.params.args.key).toBe("Enter");
+  });
 });
