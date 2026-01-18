@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SOCKET_PATH = "/tmp/surf.sock";
 const CLI_PATH = path.join(__dirname, "../../native/cli.cjs");
@@ -45,9 +49,9 @@ describe("CLI to Socket communication", () => {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("Test timeout")), 5000);
 
-      server = net.createServer((socket) => {
+      server = net.createServer((socket: net.Socket) => {
         let data = "";
-        socket.on("data", (chunk) => {
+        socket.on("data", (chunk: Buffer) => {
           data += chunk.toString();
           socket.write(`${JSON.stringify(response)}\n`);
         });
@@ -59,7 +63,7 @@ describe("CLI to Socket communication", () => {
 
       server.listen(SOCKET_PATH, () => {
         const cli = spawn("node", [CLI_PATH, ...args]);
-        cli.on("error", (err) => {
+        cli.on("error", (err: Error) => {
           clearTimeout(timeout);
           reject(err);
         });
@@ -599,11 +603,11 @@ describe("CLI to Socket communication", () => {
         const cli = spawn("node", [CLI_PATH, "go", "https://example.com"]);
         let stderr = "";
 
-        cli.stderr.on("data", (chunk) => {
+        cli.stderr.on("data", (chunk: Buffer) => {
           stderr += chunk.toString();
         });
 
-        cli.on("close", (code) => {
+        cli.on("close", (code: number | null) => {
           resolve({ code, stderr });
         });
       });
@@ -616,7 +620,7 @@ describe("CLI to Socket communication", () => {
       const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
         const timeout = setTimeout(() => resolve({ code: 1, stderr: "timeout" }), 5000);
 
-        server = net.createServer((socket) => {
+        server = net.createServer((socket: net.Socket) => {
           socket.on("data", () => {
             socket.write(
               `${JSON.stringify({ error: { content: [{ text: "Element not found" }] } })}\n`,
@@ -628,11 +632,11 @@ describe("CLI to Socket communication", () => {
           const cli = spawn("node", [CLI_PATH, "click", "e99"]);
           let stderr = "";
 
-          cli.stderr.on("data", (chunk) => {
+          cli.stderr.on("data", (chunk: Buffer) => {
             stderr += chunk.toString();
           });
 
-          cli.on("close", (code) => {
+          cli.on("close", (code: number | null) => {
             clearTimeout(timeout);
             resolve({ code, stderr });
           });
