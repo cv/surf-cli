@@ -455,6 +455,117 @@ describe("CLI to Socket communication", () => {
       expectedTool: "frame.js",
       expectedArgs: { code: "return 1+1", frame: "iframe-1" },
     },
+
+    // Tab groups
+    {
+      name: "tab.group with name and color",
+      args: ["tab.group", "--name", "Work", "--color", "blue"],
+      expectedTool: "tab.group",
+      expectedArgs: { name: "Work", color: "blue" },
+    },
+    {
+      name: "tab.group with tabs",
+      args: ["tab.group", "--name", "Research", "--tabs", "1,2,3"],
+      expectedTool: "tab.group",
+      expectedArgs: { name: "Research", tabs: "1,2,3" },
+    },
+    {
+      name: "tab.ungroup",
+      args: ["tab.ungroup", "--tabs", "4,5"],
+      expectedTool: "tab.ungroup",
+      expectedArgs: { tabs: "4,5" },
+    },
+    { name: "tab.groups", args: ["tab.groups"], expectedTool: "tab.groups" },
+
+    // Wait (base command)
+    {
+      name: "wait with duration",
+      args: ["wait", "2"],
+      expectedTool: "wait",
+      expectedArgs: { duration: 2 },
+    },
+
+    // Upload
+    {
+      name: "upload with ref and files",
+      args: ["upload", "--ref", "e5", "--files", "/path/to/file.pdf"],
+      expectedTool: "upload",
+      expectedArgs: { ref: "e5", files: "/path/to/file.pdf" },
+    },
+
+    // Resize (standalone command)
+    {
+      name: "resize with dimensions",
+      args: ["resize", "--width", "1280", "--height", "720"],
+      expectedTool: "resize",
+      expectedArgs: { width: 1280, height: 720 },
+    },
+
+    // Smoke
+    {
+      name: "smoke with urls",
+      args: ["smoke", "--urls", "https://example.com", "https://test.com"],
+      expectedTool: "smoke",
+      expectedArgs: { urls: ["https://example.com", "https://test.com"] },
+    },
+    {
+      name: "smoke with routes and fail-fast",
+      args: ["smoke", "--routes", "auth", "--fail-fast"],
+      expectedTool: "smoke",
+      expectedArgs: { routes: "auth", "fail-fast": true },
+    },
+
+    // Console (base command)
+    {
+      name: "console",
+      args: ["console"],
+      expectedTool: "console",
+    },
+    // Note: --level is stripped out by CLI for stream handling, so we test --limit instead
+    {
+      name: "console with limit",
+      args: ["console", "--limit", "100"],
+      expectedTool: "console",
+      expectedArgs: { limit: 100 },
+    },
+    {
+      name: "console with limit and clear",
+      args: ["console", "--limit", "50", "--clear"],
+      expectedTool: "console",
+      expectedArgs: { limit: 50, clear: true },
+    },
+
+    // Network (base command)
+    {
+      name: "network with origin filter",
+      args: ["network", "--origin", "api.github.com"],
+      expectedTool: "network",
+      expectedArgs: { origin: "api.github.com" },
+    },
+    {
+      name: "network with method and status",
+      args: ["network", "--method", "POST", "--status", "200"],
+      expectedTool: "network",
+      expectedArgs: { method: "POST", status: 200 },
+    },
+    {
+      name: "network with format",
+      args: ["network", "--format", "curl"],
+      expectedTool: "network",
+      expectedArgs: { format: "curl" },
+    },
+    {
+      name: "network verbose",
+      args: ["network", "-v"],
+      expectedTool: "network",
+      expectedArgs: { v: true },
+    },
+    {
+      name: "network with multiple filters",
+      args: ["network", "--type", "json", "--last", "10", "--exclude-static"],
+      expectedTool: "network",
+      expectedArgs: { type: "json", last: 10, "exclude-static": true },
+    },
   ];
 
   it.each(commandTests)("$name", async (test) => {
@@ -465,7 +576,11 @@ describe("CLI to Socket communication", () => {
 
     if (test.expectedArgs) {
       for (const [key, value] of Object.entries(test.expectedArgs)) {
-        expect(request.params.args[key]).toBe(value);
+        if (Array.isArray(value)) {
+          expect(request.params.args[key]).toEqual(value);
+        } else {
+          expect(request.params.args[key]).toBe(value);
+        }
       }
     }
 
