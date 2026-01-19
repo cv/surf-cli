@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Element styles inspection** - New `element.styles` command to get computed CSS styles from elements. Returns font, color, background, border, padding, and bounding box. Accepts refs or CSS selectors.
+- **Dropdown select command** - New `select` command to select options in `<select>` dropdowns. Supports single/multi-select, matching by value (default), label, or index.
+
 ## [2.1.0] - 2025-01-17
 
 ### Added

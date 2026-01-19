@@ -349,6 +349,37 @@ const TOOLS = {
       },
     }
   },
+  element: {
+    desc: "Element inspection",
+    commands: {
+      "element.styles": {
+        desc: "Get computed styles from element(s)",
+        args: ["ref_or_selector"],
+        examples: [
+          { cmd: "element.styles e5", desc: "Get styles by ref" },
+          { cmd: 'element.styles ".header"', desc: "Get styles by selector (can return multiple)" },
+        ]
+      },
+    }
+  },
+  forms: {
+    desc: "Form interactions",
+    commands: {
+      "select": {
+        desc: "Select option(s) in dropdown",
+        args: ["ref_or_selector", "values..."],
+        opts: {
+          by: "Match by: value (default), label, index"
+        },
+        examples: [
+          { cmd: 'select e5 "US"', desc: "Select by value" },
+          { cmd: 'select e5 "opt1" "opt2"', desc: "Multi-select" },
+          { cmd: 'select e5 --by label "United States"', desc: "Select by visible text" },
+          { cmd: 'select e5 --by index 0', desc: "Select first option" },
+        ]
+      },
+    }
+  },
   wait: {
     desc: "Waiting",
     commands: {
@@ -1809,6 +1840,8 @@ const PRIMARY_ARG_MAP = {
   "locate.label": "label",
   "emulate.device": "device",
   "frame.js": "code",
+  "element.styles": "selector",
+  "select": "selector",
 };
 
 const toolArgs = { ...options };
@@ -1843,6 +1876,17 @@ if (tool === "js" && toolArgs.file) {
     console.error(`Error: Failed to read file: ${e.message}`);
     process.exit(1);
   }
+}
+
+// Handle select command: capture multiple values after selector
+if (tool === "select" && positional.length > 2) {
+  const values = positional.slice(2);  // All args after "select <selector>"
+  toolArgs.values = values.length === 1 ? values[0] : values;
+} else if (tool === "select" && positional.length === 2) {
+  // Only selector provided, no values
+  console.error("Error: select requires at least one value");
+  console.error("Usage: surf select <selector> <value...>");
+  process.exit(1);
 }
 
 if (toolArgs.into && !toolArgs.selector) {

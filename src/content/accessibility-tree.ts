@@ -1696,6 +1696,167 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       break;
     }
+    case "GET_ELEMENT_STYLES": {
+      try {
+        const { selector } = message;
+        const elementMap = getElementMap();
+        
+        // Helper to extract styles from an element
+        const extractStyles = (el: Element) => {
+          const s = getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return {
+            tag: el.tagName.toLowerCase(),
+            text: (el as HTMLElement).innerText?.trim().slice(0, 80) || null,
+            box: {
+              x: Math.round(r.x),
+              y: Math.round(r.y),
+              width: Math.round(r.width),
+              height: Math.round(r.height),
+            },
+            styles: {
+              fontSize: s.fontSize,
+              fontWeight: s.fontWeight,
+              fontFamily: s.fontFamily.split(',')[0].trim().replace(/"/g, ''),
+              color: s.color,
+              backgroundColor: s.backgroundColor,
+              borderRadius: s.borderRadius,
+              border: s.border !== 'none' && s.borderWidth !== '0px' ? s.border : null,
+              boxShadow: s.boxShadow !== 'none' ? s.boxShadow : null,
+              padding: s.padding,
+            },
+          };
+        };
+        
+        // Check if selector is a ref (e.g., "e5")
+        if (/^e\d+$/.test(selector)) {
+          const elemRef = elementMap[selector];
+          let element: Element | undefined;
+          if (elemRef) {
+            element = elemRef.element.deref();
+            if (!element) delete elementMap[selector];
+          }
+          if (!element && window.__piRefs) {
+            element = window.__piRefs[selector];
+          }
+          
+          if (!element) {
+            sendResponse({ error: `Element ${selector} not found` });
+            break;
+          }
+          
+          sendResponse({ styles: [extractStyles(element)] });
+        } else {
+          // CSS selector - can match multiple elements
+          const elements = document.querySelectorAll(selector);
+          if (elements.length === 0) {
+            sendResponse({ error: `No elements found matching "${selector}"` });
+            break;
+          }
+          
+          const styles = Array.from(elements).map(extractStyles);
+          sendResponse({ styles });
+        }
+      } catch (err) {
+        sendResponse({ error: err instanceof Error ? err.message : String(err) });
+      }
+      break;
+    }
+    case "SELECT_OPTION": {
+      try {
+        const { selector, values, by } = message;
+        const elementMap = getElementMap();
+        
+        // Find the select element
+        let selectEl: HTMLSelectElement | null = null;
+        
+        if (/^e\d+$/.test(selector)) {
+          const elemRef = elementMap[selector];
+          let element: Element | undefined;
+          if (elemRef) {
+            element = elemRef.element.deref();
+            if (!element) delete elementMap[selector];
+          }
+          if (!element && window.__piRefs) {
+            element = window.__piRefs[selector];
+          }
+          
+          if (!element) {
+            sendResponse({ error: `Element ${selector} not found` });
+            break;
+          }
+          if (element.tagName !== 'SELECT') {
+            sendResponse({ error: `Element ${selector} is not a <select>` });
+            break;
+          }
+          selectEl = element as HTMLSelectElement;
+        } else {
+          selectEl = document.querySelector(selector) as HTMLSelectElement;
+          if (!selectEl) {
+            sendResponse({ error: `No element found matching "${selector}"` });
+            break;
+          }
+          if (selectEl.tagName !== 'SELECT') {
+            sendResponse({ error: `Element "${selector}" is not a <select>` });
+            break;
+          }
+        }
+        
+        // Clear current selection for multi-select
+        if (selectEl.multiple) {
+          for (const opt of selectEl.options) {
+            opt.selected = false;
+          }
+        }
+        
+        const selected: string[] = [];
+        const notFound: string[] = [];
+        
+        // For single-select, only use the first value
+        const valuesToSelect = selectEl.multiple ? values : [values[0]];
+        
+        for (const val of valuesToSelect) {
+          let found = false;
+          
+          for (const opt of selectEl.options) {
+            let matches = false;
+            
+            if (by === 'index') {
+              matches = opt.index === parseInt(val, 10);
+            } else if (by === 'label') {
+              matches = opt.text.toLowerCase().includes(val.toLowerCase());
+            } else {
+              // Default: match by value
+              matches = opt.value === val;
+            }
+            
+            if (matches) {
+              opt.selected = true;
+              selected.push(opt.value);
+              found = true;
+              break;  // Found match for this value, move to next
+            }
+          }
+          
+          if (!found) notFound.push(val);
+        }
+        
+        // Dispatch change event
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        if (notFound.length > 0) {
+          sendResponse({ 
+            selected, 
+            warning: `Values not found: ${notFound.join(', ')}` 
+          });
+        } else {
+          sendResponse({ selected });
+        }
+      } catch (err) {
+        sendResponse({ error: err instanceof Error ? err.message : String(err) });
+      }
+      break;
+    }
     case "GET_ELEMENT_TEXT": {
       try {
         const { ref } = message;

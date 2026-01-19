@@ -168,6 +168,29 @@ surf key Escape                     # Press key
 surf scroll.bottom                  # Scroll to bottom
 ```
 
+### Forms
+
+Select options in dropdown menus:
+
+```bash
+surf select e5 "US"                         # Select by value
+surf select "#country" "US"                 # Select by CSS selector
+surf select e5 "opt1" "opt2"                # Multi-select
+surf select e5 --by label "United States"   # Select by visible text
+surf select e5 --by index 0                 # Select first option
+```
+
+### Element Inspection
+
+Get computed styles from elements:
+
+```bash
+surf element.styles e5              # Get styles by ref
+surf element.styles ".header"       # Get styles by CSS selector (can return multiple)
+```
+
+Returns font, color, background, border, padding, and bounding box for design debugging.
+
 ### Screenshots
 
 Screenshots auto-save to `/tmp` by default (optimized for AI agents):
@@ -360,6 +383,7 @@ echo '{"type":"tool_request","method":"execute_tool","params":{"tool":"tab.list"
 | `scroll.*` | `top`, `bottom`, `to`, `info` |
 | `page.*` | `read`, `text`, `state` |
 | `locate.*` | `role`, `text`, `label` |
+| `element.*` | `styles` |
 | `frame.*` | `list`, `switch`, `main`, `js` |
 | `wait.*` | `element`, `network`, `url`, `dom`, `load` |
 | `cookie.*` | `list`, `get`, `set`, `clear` |

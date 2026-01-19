@@ -20,6 +20,37 @@ function formatToolContent(result, log = () => {}) {
     return text(result.content);
   }
   
+  // Handle element.styles response
+  if (result.styles && Array.isArray(result.styles)) {
+    const output = result.styles.map(el => {
+      const lines = [`<${el.tag}>${el.text ? ` "${el.text.slice(0, 50)}${el.text.length > 50 ? '...' : ''}"` : ''}`];
+      if (el.box) lines.push(`  box: ${el.box.x},${el.box.y} ${el.box.width}x${el.box.height}`);
+      const s = el.styles;
+      if (s) {
+        if (s.fontSize) lines.push(`  font: ${s.fontSize} ${s.fontWeight} ${s.fontFamily}`);
+        if (s.color) lines.push(`  color: ${s.color}`);
+        if (s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)') lines.push(`  bg: ${s.backgroundColor}`);
+        if (s.borderRadius && s.borderRadius !== '0px') lines.push(`  radius: ${s.borderRadius}`);
+        if (s.border) lines.push(`  border: ${s.border}`);
+        if (s.boxShadow) lines.push(`  shadow: ${s.boxShadow}`);
+        if (s.padding && s.padding !== '0px') lines.push(`  padding: ${s.padding}`);
+      }
+      return lines.join('\n');
+    }).join('\n\n');
+    return text(output || "No elements found");
+  }
+  
+  // Handle select response
+  if (result.selected !== undefined) {
+    let output = Array.isArray(result.selected) 
+      ? `Selected: ${result.selected.join(', ')}`
+      : `Selected: ${result.selected}`;
+    if (result.warning) {
+      output += `\n[Warning: ${result.warning}]`;
+    }
+    return text(output);
+  }
+  
   // Handle ChatGPT/Gemini responses
   if (result.response !== undefined && result.model !== undefined && result.tookMs !== undefined) {
     let output = result.response;
@@ -815,6 +846,25 @@ function mapToolToMessage(tool, args, tabId) {
         value: a.value,
         ...baseMsg 
       };
+    case "element.styles":
+      if (!a.selector) throw new Error("selector argument required");
+      return { 
+        type: "GET_ELEMENT_STYLES", 
+        selector: a.selector,
+        ...baseMsg 
+      };
+    case "select": {
+      if (!a.selector) throw new Error("selector argument required");
+      const values = Array.isArray(a.values) ? a.values : (a.values ? [a.values] : []);
+      if (values.length === 0) throw new Error("at least one value required");
+      return { 
+        type: "SELECT_OPTION", 
+        selector: a.selector,
+        values,
+        by: a.by || "value",  // value, label, or index
+        ...baseMsg 
+      };
+    }
     case "ai":
       return { type: "AI_ANALYZE", query: a.query, act: a.act, mode: a.mode, ...baseMsg };
     case "wait":

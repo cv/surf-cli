@@ -1073,6 +1073,43 @@ export async function handleMessage(
       }
     }
 
+    case "GET_ELEMENT_STYLES": {
+      if (!tabId) throw new Error("No tabId provided");
+      if (!message.selector) throw new Error("selector required");
+      const stylesFrameId = getFrameIdForTab(tabId);
+      
+      try {
+        const result = await chrome.tabs.sendMessage(tabId, {
+          type: "GET_ELEMENT_STYLES",
+          selector: message.selector,
+        }, { frameId: stylesFrameId });
+        
+        return result;
+      } catch (err) {
+        return { error: "Content script not loaded. Try refreshing the page." };
+      }
+    }
+
+    case "SELECT_OPTION": {
+      if (!tabId) throw new Error("No tabId provided");
+      if (!message.selector) throw new Error("selector required");
+      if (!message.values) throw new Error("values required");
+      const selectFrameId = getFrameIdForTab(tabId);
+      
+      try {
+        const result = await chrome.tabs.sendMessage(tabId, {
+          type: "SELECT_OPTION",
+          selector: message.selector,
+          values: message.values,
+          by: message.by || "value",
+        }, { frameId: selectFrameId });
+        
+        return result;
+      } catch (err) {
+        return { error: "Content script not loaded. Try refreshing the page." };
+      }
+    }
+
     case "SHOW_AGENT_INDICATORS":
     case "HIDE_AGENT_INDICATORS":
     case "SHOW_STATIC_INDICATOR":
