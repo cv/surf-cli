@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.0] - 2026-01-20
+
+### Added
+- **Grok AI integration** - Query X.com's Grok AI via `surf grok "query"`. Supports `--with-page` for context, `--deep-search` for DeepSearch mode, and `--model` for model selection (auto, fast, expert, thinking). Requires X.com login in Chrome.
+- **Grok validation command** - `surf grok --validate` checks UI structure and lists available models. Use `--save-models` to persist discovered models to `surf.json` config for when X updates their UI.
+- **Grok response warnings** - Agents receive warnings when model selection fails or differs from requested, with actionable suggestions to run `--validate`.
+- **Grok unit tests** - 17 new tests covering response extraction, cookie validation, and model loading.
+
+### Fixed
+- Fixed AI query response detection being too slow due to overly strict completion checks.
+- Fixed short responses (like "4" for math queries) not being detected due to minimum length requirement.
+
 ## [2.2.0] - 2025-01-19
 
 ### Added

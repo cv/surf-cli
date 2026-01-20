@@ -9,6 +9,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const chatgptClient = require("./chatgpt-client.cjs");
 const geminiClient = require("./gemini-client.cjs");
 const perplexityClient = require("./perplexity-client.cjs");
+const grokClient = require("./grok-client.cjs");
 const { mapToolToMessage, mapComputerAction, formatToolContent } = require("./host-helpers.cjs");
 
 const SOCKET_PATH = "/tmp/surf.sock";
@@ -706,6 +707,203 @@ function handleToolRequest(msg, socket) {
         response.imagePath = result.imagePath;
       }
       sendToolResponse(socket, originalId, response, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+    
+    return;
+  }
+  
+  if (extensionMsg.type === "GROK_QUERY") {
+    const { query, model, deepSearch, withPage, timeout } = extensionMsg;
+    
+    queueAiRequest(async () => {
+      // 1. Get page context if requested
+      let pageContext = null;
+      if (withPage) {
+        const pageResult = await new Promise((resolve) => {
+          const pageId = ++requestCounter;
+          pendingToolRequests.set(pageId, {
+            socket: null,
+            originalId: null,
+            tool: "get_page_text",
+            onComplete: resolve
+          });
+          writeMessage({ type: "GET_PAGE_TEXT", tabId: extensionMsg.tabId, id: pageId });
+        });
+        if (pageResult && !pageResult.error) {
+          pageContext = {
+            url: pageResult.url,
+            text: pageResult.text || pageResult.pageContent || ""
+          };
+        }
+      }
+      
+      // 2. Build full prompt
+      let fullPrompt = query || "";
+      if (pageContext) {
+        fullPrompt = `Page: ${pageContext.url}\n\n${pageContext.text}\n\n---\n\n${fullPrompt}`;
+      }
+      
+      // 3. Call Grok client
+      const result = await grokClient.query({
+        prompt: fullPrompt,
+        model: model,
+        deepSearch: deepSearch || false,
+        timeout: timeout || 300000,
+        getCookies: () => new Promise((resolve) => {
+          const cookieId = ++requestCounter;
+          pendingToolRequests.set(cookieId, {
+            socket: null,
+            originalId: null,
+            tool: "get_cookies",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GET_TWITTER_COOKIES", id: cookieId });
+        }),
+        createTab: () => new Promise((resolve) => {
+          const tabCreateId = ++requestCounter;
+          pendingToolRequests.set(tabCreateId, {
+            socket: null,
+            originalId: null,
+            tool: "create_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_NEW_TAB", id: tabCreateId });
+        }),
+        closeTab: (tabIdToClose) => new Promise((resolve) => {
+          const tabCloseId = ++requestCounter;
+          pendingToolRequests.set(tabCloseId, {
+            socket: null,
+            originalId: null,
+            tool: "close_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_CLOSE_TAB", tabId: tabIdToClose, id: tabCloseId });
+        }),
+        cdpEvaluate: (tabId, expression) => new Promise((resolve) => {
+          const evalId = ++requestCounter;
+          pendingToolRequests.set(evalId, {
+            socket: null,
+            originalId: null,
+            tool: "cdp_evaluate",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_EVALUATE", tabId, expression, id: evalId });
+        }),
+        cdpCommand: (tabId, method, params) => new Promise((resolve) => {
+          const cmdId = ++requestCounter;
+          pendingToolRequests.set(cmdId, {
+            socket: null,
+            originalId: null,
+            tool: "cdp_command",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_CDP_COMMAND", tabId, method, params, id: cmdId });
+        }),
+        log: (msg) => log(`[grok] ${msg}`)
+      });
+      
+      return result;
+    }).then((result) => {
+      const response = { 
+        response: result.response, 
+        model: result.model, 
+        tookMs: result.tookMs 
+      };
+      if (result.thinkingTime) {
+        response.thinkingTime = result.thinkingTime;
+      }
+      if (result.deepSearch) {
+        response.deepSearch = result.deepSearch;
+      }
+      if (result.partial) {
+        response.partial = true;
+      }
+      if (result.warnings && result.warnings.length > 0) {
+        response.warnings = result.warnings;
+      }
+      if (result.modelSelectionFailed) {
+        response.modelSelectionFailed = true;
+      }
+      sendToolResponse(socket, originalId, response, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+    
+    return;
+  }
+  
+  if (extensionMsg.type === "GROK_VALIDATE") {
+    const { saveModels } = extensionMsg;
+    
+    queueAiRequest(async () => {
+      const result = await grokClient.validate({
+        getCookies: () => new Promise((resolve) => {
+          const cookieId = ++requestCounter;
+          pendingToolRequests.set(cookieId, {
+            socket: null,
+            originalId: null,
+            tool: "get_cookies",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GET_TWITTER_COOKIES", id: cookieId });
+        }),
+        createTab: () => new Promise((resolve) => {
+          const tabCreateId = ++requestCounter;
+          pendingToolRequests.set(tabCreateId, {
+            socket: null,
+            originalId: null,
+            tool: "create_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_NEW_TAB", id: tabCreateId });
+        }),
+        closeTab: (tabIdToClose) => new Promise((resolve) => {
+          const tabCloseId = ++requestCounter;
+          pendingToolRequests.set(tabCloseId, {
+            socket: null,
+            originalId: null,
+            tool: "close_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_CLOSE_TAB", tabId: tabIdToClose, id: tabCloseId });
+        }),
+        cdpEvaluate: (tabId, expression) => new Promise((resolve) => {
+          const evalId = ++requestCounter;
+          pendingToolRequests.set(evalId, {
+            socket: null,
+            originalId: null,
+            tool: "cdp_evaluate",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GROK_EVALUATE", tabId, expression, id: evalId });
+        }),
+        log: (msg) => log(`[grok:validate] ${msg}`)
+      });
+      
+      return result;
+    }).then((result) => {
+      // If --save-models flag was passed and we found models, save them
+      if (saveModels && result.models && result.models.length > 0) {
+        // Convert scraped model names to our format
+        const modelMap = {};
+        result.models.forEach(name => {
+          const nameLower = name.toLowerCase();
+          // Match known model keywords to generate consistent short IDs
+          let shortId;
+          if (nameLower.includes('thinking')) shortId = 'thinking';
+          else if (nameLower.includes('expert')) shortId = 'expert';
+          else if (nameLower.includes('fast')) shortId = 'fast';
+          else if (nameLower.includes('auto')) shortId = 'auto';
+          else shortId = nameLower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          
+          modelMap[shortId] = { id: shortId, name: name, desc: "" };
+        });
+        const saveResult = grokClient.saveModels(modelMap);
+        result.savedModels = saveResult;
+      }
+      sendToolResponse(socket, originalId, result, null);
     }).catch((err) => {
       sendToolResponse(socket, originalId, null, err.message);
     });

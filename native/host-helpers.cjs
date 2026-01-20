@@ -51,11 +51,50 @@ function formatToolContent(result, log = () => {}) {
     return text(output);
   }
   
-  // Handle ChatGPT/Gemini responses
+  // Handle Grok validation results
+  if (result.authenticated !== undefined && result.models !== undefined && result.expectedModels !== undefined) {
+    let output = "## Grok Validation Results\n\n";
+    output += `**Authenticated:** ${result.authenticated ? 'Yes' : 'No'}\n`;
+    output += `**Premium:** ${result.premium ? 'Yes' : 'No'}\n`;
+    output += `**Input Field:** ${result.inputFound ? 'Found' : 'Not Found'}\n`;
+    output += `**Send Button:** ${result.sendButtonFound ? 'Found' : 'Not Found'}\n\n`;
+    
+    output += `**Available Models:** ${result.models.length > 0 ? result.models.join(', ') : 'None found'}\n`;
+    output += `**Expected Models:** ${result.expectedModels.join(', ')}\n`;
+    output += `**Model Mismatch:** ${result.modelMismatch ? 'Yes' : 'No'}\n\n`;
+    
+    if (result.errors && result.errors.length > 0) {
+      output += `**Errors:**\n${result.errors.map(e => `- ${e}`).join('\n')}\n\n`;
+    }
+    
+    if (result.savedModels) {
+      if (result.savedModels.success) {
+        output += `**Models saved to:** ${result.savedModels.path}\n`;
+      } else {
+        output += `**Failed to save models:** ${result.savedModels.error}\n`;
+      }
+    }
+    
+    output += `\n*Config: ${result.configPath}*\n`;
+    output += `*Completed in ${result.tookMs}ms*`;
+    
+    return text(output);
+  }
+  
+  // Handle ChatGPT/Gemini/Grok responses
   if (result.response !== undefined && result.model !== undefined && result.tookMs !== undefined) {
     let output = result.response;
     if (result.imagePath) {
       output += `\n\n*Image saved to: ${result.imagePath}*`;
+    }
+    if (result.thinkingTime) {
+      output += `\n\n*Grok thought for ${result.thinkingTime}s*`;
+    }
+    if (result.partial) {
+      output += `\n\n*Warning: Response was truncated due to timeout*`;
+    }
+    if (result.warnings && result.warnings.length > 0) {
+      output += `\n\n**Warnings:**\n${result.warnings.map(w => `- ${w}`).join('\n')}`;
     }
     return text(output);
   }
@@ -1011,6 +1050,24 @@ function mapToolToMessage(tool, args, tabId) {
         model: a.model,
         withPage: a["with-page"],
         timeout: a.timeout ? parseInt(a.timeout, 10) * 1000 : 120000,
+        ...baseMsg
+      };
+    case "grok":
+      if (a.validate) {
+        return {
+          type: "GROK_VALIDATE",
+          saveModels: a["save-models"] || a.saveModels || false,
+          ...baseMsg
+        };
+      }
+      if (!a.query) throw new Error("query required");
+      return {
+        type: "GROK_QUERY",
+        query: a.query,
+        model: a.model,
+        deepSearch: a["deep-search"] || a.deepSearch || false,
+        withPage: a["with-page"],
+        timeout: a.timeout ? parseInt(a.timeout, 10) * 1000 : 300000,
         ...baseMsg
       };
     case "window.new":

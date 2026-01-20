@@ -146,6 +146,27 @@ const TOOLS = {
           { cmd: 'perplexity "latest AI news" --model sonar', desc: "Specify model (Pro)" },
         ]
       },
+      "grok": {
+        desc: "Query Grok AI with real-time X/Twitter data access (uses browser session)",
+        args: ["query"],
+        opts: {
+          "with-page": "Include current page context",
+          model: "Model: auto, fast, expert, thinking (default)",
+          "deep-search": "Enable DeepSearch for X post searching",
+          timeout: "Timeout in seconds (default: 300 for thinking models)",
+          validate: "Check Grok UI and scrape available models (no query sent)",
+          "save-models": "Save discovered models to surf.json config"
+        },
+        examples: [
+          { cmd: 'grok "what are the latest AI agent trends on X"', desc: "Search X posts" },
+          { cmd: 'grok "analyze @username recent activity"', desc: "Profile analysis" },
+          { cmd: 'grok "summarize this page" --with-page', desc: "With page context" },
+          { cmd: 'grok "find viral AI posts" --deep-search', desc: "DeepSearch mode" },
+          { cmd: 'grok "quick question" --model fast', desc: "Faster model" },
+          { cmd: 'grok --validate', desc: "Check UI and list available models" },
+          { cmd: 'grok --validate --save-models', desc: "Save discovered models to settings" },
+        ]
+      },
       "ai": { 
         desc: "Analyze page with AI (requires GOOGLE_API_KEY)", 
         args: ["query"], 
@@ -1802,6 +1823,7 @@ const PRIMARY_ARG_MAP = {
   gemini: "query",
   chatgpt: "query",
   perplexity: "query",
+  grok: "query",
   navigate: "url",
   go: "url",
   js: "code",
@@ -2168,7 +2190,7 @@ const socket = net.createConnection(SOCKET_PATH, () => {
   socket.write(JSON.stringify(request) + "\n");
 });
 
-const AI_TOOLS = ["smoke", "chatgpt", "gemini", "perplexity", "ai"];
+const AI_TOOLS = ["smoke", "chatgpt", "gemini", "perplexity", "grok", "ai"];
 const requestTimeout = AI_TOOLS.includes(tool) ? 300000 : 30000;
 const timeout = setTimeout(() => {
   console.error(`Error: Request timed out (${requestTimeout / 1000}s)`);

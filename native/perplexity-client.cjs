@@ -193,22 +193,21 @@ async function selectModel(cdp, model, timeoutMs = 8000) {
   
   await delay(500);
   
-  // Select from menu
+  // Select from menu - loop in Node.js to avoid CDP timeout issues
   const normalizedModel = model.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const deadline = Date.now() + timeoutMs;
   
-  const result = await evaluate(cdp, `(async () => {
-    ${buildClickDispatcher()}
-    
-    const targetModel = ${JSON.stringify(normalizedModel)};
-    const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const deadline = Date.now() + ${timeoutMs};
-    
-    while (Date.now() < deadline) {
+  while (Date.now() < deadline) {
+    const result = await evaluate(cdp, `(() => {
+      ${buildClickDispatcher()}
+      
+      const targetModel = ${JSON.stringify(normalizedModel)};
+      const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      
       const menuItems = document.querySelectorAll('[role=menuitem], [role=menuitemradio], [role=option]');
       
       if (menuItems.length === 0) {
-        await new Promise(r => setTimeout(r, 100));
-        continue;
+        return { found: false, waiting: true };
       }
       
       let bestMatch = null;
@@ -229,23 +228,28 @@ async function selectModel(cdp, model, timeoutMs = 8000) {
       
       if (bestMatch) {
         dispatchClickSequence(bestMatch);
-        await new Promise(r => setTimeout(r, 200));
-        return { success: true, model: bestMatch.textContent?.trim() };
+        return { found: true, success: true, model: bestMatch.textContent?.trim() };
       }
       
-      await new Promise(r => setTimeout(r, 100));
+      return { found: true, success: false, error: 'No matching model in menu' };
+    })()`);
+    
+    if (result && result.found) {
+      if (result.success) {
+        await delay(200);
+        return result.model;
+      }
+      // Items found but no match - close menu and throw
+      await evaluate(cdp, `document.body.click()`);
+      throw new Error(`Failed to select model: ${result?.error}`);
     }
     
-    // Close menu by clicking elsewhere
-    document.body.click();
-    return { success: false, error: 'Model not found in menu' };
-  })()`);
-  
-  if (!result || !result.success) {
-    throw new Error(`Failed to select model: ${result?.error}`);
+    await delay(100);
   }
   
-  return result.model;
+  // Timeout - close menu
+  await evaluate(cdp, `document.body.click()`);
+  throw new Error(`Failed to select model: timeout waiting for menu`);
 }
 
 // ============================================================================

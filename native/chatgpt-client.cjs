@@ -150,22 +150,23 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
     })()`
   );
   await delay(300);
+  // Select from menu - loop in Node.js to avoid CDP timeout issues
   const normalizedModel = desiredModel.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const result = await evaluate(
-    cdp,
-    `(async () => {
-      ${buildClickDispatcher()}
-      const TIMEOUT_MS = ${timeoutMs};
-      const targetModel = ${JSON.stringify(normalizedModel)};
-      const menuSelector = '${SELECTORS.menuContainer}';
-      const itemSelector = '${SELECTORS.menuItem}';
-      const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const deadline = Date.now() + TIMEOUT_MS;
-      while (Date.now() < deadline) {
+  const deadline = Date.now() + timeoutMs;
+  
+  while (Date.now() < deadline) {
+    const result = await evaluate(
+      cdp,
+      `(() => {
+        ${buildClickDispatcher()}
+        const targetModel = ${JSON.stringify(normalizedModel)};
+        const menuSelector = '${SELECTORS.menuContainer}';
+        const itemSelector = '${SELECTORS.menuItem}';
+        const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        
         const menu = document.querySelector(menuSelector);
         if (!menu) {
-          await new Promise(r => setTimeout(r, 100));
-          continue;
+          return { found: false, waiting: true };
         }
         const items = Array.from(menu.querySelectorAll(itemSelector));
         let bestMatch = null;
@@ -183,18 +184,24 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
         }
         if (bestMatch) {
           dispatchClickSequence(bestMatch);
-          await new Promise(r => setTimeout(r, 200));
-          return { success: true, label: bestMatch.textContent?.trim() };
+          return { found: true, success: true, label: bestMatch.textContent?.trim() };
         }
-        await new Promise(r => setTimeout(r, 100));
+        return { found: true, success: false, error: 'No matching model in menu' };
+      })()`
+    );
+    
+    if (result && result.found) {
+      if (result.success) {
+        await delay(200);
+        return result.label;
       }
-      return { success: false, error: 'Model option not found' };
-    })()`
-  );
-  if (!result || !result.success) {
-    throw new Error(`Model not found: ${desiredModel}`);
+      throw new Error(`Model not found: ${desiredModel}`);
+    }
+    
+    await delay(100);
   }
-  return result.label;
+  
+  throw new Error(`Model not found: ${desiredModel} (timeout)`);
 }
 
 async function typePrompt(cdp, inputCdp, prompt) {

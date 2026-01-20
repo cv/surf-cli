@@ -23,7 +23,7 @@ Surf takes a different approach:
 
 **Smart Defaults** - Screenshots auto-resize to 1200px (saves tokens). Actions auto-capture screenshots (saves round-trips). Errors on restricted pages warn instead of fail.
 
-**AI Without API Keys** - Query ChatGPT, Gemini, and Perplexity using your browser's logged-in session. No API keys, no rate limits, no cost.
+**AI Without API Keys** - Query ChatGPT, Gemini, Perplexity, and Grok using your existing browser logins. No API keys needed.
 
 **Network Capture** - Automatically logs all network requests while active. Filter, search, and replay API calls without manually setting up request interception.
 
@@ -298,9 +298,20 @@ surf perplexity "what is quantum computing"
 surf perplexity "explain this page" --with-page               # Include page context
 surf perplexity "deep dive" --mode research                   # Research mode (Pro)
 surf perplexity "latest news" --model sonar                   # Model selection (Pro)
+
+# Grok (queries x.com/i/grok using your X.com login)
+surf grok "what are the latest AI agent trends on X"          # Search X posts
+surf grok "analyze @username recent activity"                 # Profile analysis
+surf grok "summarize this page" --with-page                   # Include page context
+surf grok "find viral AI posts" --deep-search                 # DeepSearch mode
+surf grok "quick question" --model fast                       # Models: auto, fast, expert, thinking
+surf grok --validate                                          # Check UI and available models
+surf grok --validate --save-models                            # Save discovered models to settings
 ```
 
-Requires being logged into chatgpt.com, gemini.google.com, or perplexity.ai in Chrome.
+Each AI tool uses your existing browser login - no API keys needed. Just be logged into the respective service in Chrome (chatgpt.com, gemini.google.com, perplexity.ai, or x.com).
+
+**Grok troubleshooting:** If queries fail, run `surf grok --validate` to check if the UI structure changed. Use `--save-models` to update the model cache in `surf.json`. Default model is "thinking" (Grok 4.1 Thinking).
 
 ### Waiting
 

@@ -2717,6 +2717,91 @@ export async function handleMessage(
       return result;
     }
 
+    case "GET_TWITTER_COOKIES": {
+      // Grok requires X.com cookies for authentication
+      const domains = [".x.com", ".twitter.com", "x.com", "twitter.com"];
+      const allCookies: chrome.cookies.Cookie[] = [];
+      
+      for (const domain of domains) {
+        try {
+          const cookies = await chrome.cookies.getAll({ domain });
+          allCookies.push(...cookies);
+        } catch {}
+      }
+      
+      // Also try by URL
+      const urls = ["https://x.com", "https://twitter.com"];
+      for (const url of urls) {
+        try {
+          const cookies = await chrome.cookies.getAll({ url });
+          allCookies.push(...cookies);
+        } catch {}
+      }
+      
+      // Dedupe by name
+      const seen = new Map<string, chrome.cookies.Cookie>();
+      for (const cookie of allCookies) {
+        const existing = seen.get(cookie.name);
+        if (!existing || cookie.domain?.includes("x.com")) {
+          seen.set(cookie.name, cookie);
+        }
+      }
+      
+      return { cookies: Array.from(seen.values()) };
+    }
+
+    case "GROK_NEW_TAB": {
+      const tab = await chrome.tabs.create({
+        url: "https://x.com/i/grok",
+        active: true,
+      });
+      if (!tab.id) throw new Error("Failed to create tab");
+      const currentTab = await chrome.tabs.get(tab.id);
+      if (currentTab.status !== "complete") {
+        await new Promise<void>((resolve) => {
+          const listener = (tabId: number, info: chrome.tabs.TabChangeInfo) => {
+            if (tabId === tab.id && info.status === "complete") {
+              chrome.tabs.onUpdated.removeListener(listener);
+              resolve();
+            }
+          };
+          chrome.tabs.onUpdated.addListener(listener);
+          setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve();
+          }, 30000);
+        });
+      }
+      await cdp.attach(tab.id);
+      // Wait for JS runtime to be ready after CDP attach
+      await waitForRuntimeReady(tab.id, 10000);
+      return { tabId: tab.id };
+    }
+
+    case "GROK_CLOSE_TAB": {
+      const grokTabId = message.tabId;
+      if (grokTabId) {
+        try {
+          await cdp.detach(grokTabId);
+        } catch {}
+        try {
+          await chrome.tabs.remove(grokTabId);
+        } catch {}
+      }
+      return { success: true };
+    }
+
+    case "GROK_CDP_COMMAND": {
+      const { method, params } = message;
+      const result = await cdp.sendCommand(message.tabId, method, params || {});
+      return result;
+    }
+
+    case "GROK_EVALUATE": {
+      const result = await cdp.evaluateScript(message.tabId, message.expression);
+      return result;
+    }
+
     case "GET_GOOGLE_COOKIES": {
       // Gemini requires cookies from multiple Google domains
       const domains = [".google.com", ".gemini.google.com", "accounts.google.com", "www.google.com"];
@@ -2863,8 +2948,9 @@ const COMMANDS_WITHOUT_TAB = new Set([
   "GET_COOKIES", "SET_COOKIE", "DELETE_COOKIES", "GET_BOOKMARKS", "ADD_BOOKMARK", 
   "DELETE_BOOKMARK", "DIALOG_DISMISS", "DIALOG_ACCEPT", "DIALOG_INFO",
   "CHATGPT_NEW_TAB", "CHATGPT_CLOSE_TAB", "CHATGPT_EVALUATE", "CHATGPT_CDP_COMMAND",
-  "GET_CHATGPT_COOKIES", "GET_GOOGLE_COOKIES",
+  "GET_CHATGPT_COOKIES", "GET_GOOGLE_COOKIES", "GET_TWITTER_COOKIES",
   "PERPLEXITY_NEW_TAB", "PERPLEXITY_CLOSE_TAB", "PERPLEXITY_EVALUATE", "PERPLEXITY_CDP_COMMAND",
+  "GROK_NEW_TAB", "GROK_CLOSE_TAB", "GROK_EVALUATE", "GROK_CDP_COMMAND",
   "WINDOW_NEW", "WINDOW_LIST", "WINDOW_FOCUS", "WINDOW_CLOSE", "WINDOW_RESIZE",
   "EMULATE_DEVICE_LIST"
 ]);
