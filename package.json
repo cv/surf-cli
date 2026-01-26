@@ -30,6 +30,7 @@
     "native/",
     "scripts/",
     "dist/",
+    "skills/",
     "README.md",
     "LICENSE"
   ],
