@@ -290,7 +290,7 @@ function resizeImage(filePath, maxSize) {
   }
 }
 const args = process.argv.slice(2);
-const VERSION = "2.0.0";
+const VERSION = "2.5.2";
 
 const ALIASES = {
   snap: "screenshot",

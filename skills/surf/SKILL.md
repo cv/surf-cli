@@ -12,8 +12,9 @@ Control Chrome browser via CLI or Unix socket.
 ```bash
 surf --help                    # Full help
 surf <group>                   # Group help (tab, scroll, page, wait, dialog, emulate, form, perf, ai)
-surf --list                    # All 60+ tools
+surf --help-full               # All commands
 surf --find <term>             # Search tools
+surf --help-topic <topic>      # Topic guide (refs, semantic, frames, devices, windows)
 ```
 
 ## Core Workflow
@@ -56,7 +57,8 @@ surf gemini "analyze" --file data.csv             # Attach file
 surf gemini "a robot surfing" --generate-image /tmp/robot.png
 surf gemini "add sunglasses" --edit-image photo.jpg --output out.jpg
 surf gemini "summarize" --youtube "https://youtube.com/..."
-surf gemini "hello" --model gemini-2.5-flash      # Model selection
+surf gemini "hello" --model gemini-2.5-flash      # Models: gemini-3-pro (default), gemini-2.5-pro, gemini-2.5-flash
+surf gemini "wide banner" --generate-image /tmp/banner.png --aspect-ratio 16:9
 ```
 
 ### Perplexity
@@ -116,23 +118,42 @@ surf tab.list
 surf tab.new "https://google.com"
 surf tab.switch 12345
 surf tab.close 12345
+surf tab.reload                # Reload current tab
 
 # Named tabs (aliases)
 surf tab.name myapp            # Name current tab
 surf tab.switch myapp          # Switch by name
 surf tab.named                 # List named tabs
+surf tab.unname myapp          # Remove name
+
+# Tab groups
+surf tab.group                 # Create/add to tab group
+surf tab.ungroup               # Remove from group
+surf tab.groups                # List all tab groups
 ```
 
 ## Window Management
 
 ```bash
 surf window.list                              # List all windows
+surf window.list --tabs                       # Include tab details
 surf window.new                               # New window
 surf window.new --url "https://example.com"   # New window with URL
 surf window.new --incognito                   # New incognito window
+surf window.new --unfocused                   # Don't focus new window
 surf window.focus 12345                       # Focus window by ID
 surf window.close 12345                       # Close window
-surf window.resize --width 1920 --height 1080 # Resize current window
+surf window.resize --id 123 --width 1920 --height 1080
+surf window.resize --id 123 --state maximized # States: normal, minimized, maximized, fullscreen
+```
+
+**Window isolation for agents:**
+```bash
+# Create isolated window for agent work
+surf window.new "https://example.com"
+# Returns window ID, use with subsequent commands:
+surf --window-id 123 tab.list
+surf --window-id 123 go "https://other.com"
 ```
 
 ## Input Methods
@@ -149,15 +170,60 @@ surf type --text "hello" --selector "#input" --method js
 surf key Enter
 surf key "cmd+a"
 surf key.repeat --key Tab --count 5           # Repeat key presses
+
+# Hover and drag
+surf hover --ref e5
+surf drag --from-x 100 --from-y 100 --to-x 200 --to-y 200
 ```
 
 ## Page Inspection
 
 ```bash
-surf page.read                 # Accessibility tree with refs
+surf page.read                 # Accessibility tree with refs + page text
+surf page.read --no-text       # Interactive elements only (no text content)
 surf page.read --ref e5        # Get specific element details
-surf page.text                 # Plain text content
+surf page.read --depth 3       # Limit tree depth
+surf page.read --compact       # Minimal output for LLM efficiency
+surf page.text                 # Plain text content only
 surf page.state                # Modals, loading state, scroll info
+```
+
+## Semantic Element Location
+
+Find and act on elements by role, text, or label instead of refs:
+
+```bash
+# Find by ARIA role
+surf locate.role button --name "Submit" --action click
+surf locate.role textbox --name "Email" --action fill --value "test@example.com"
+surf locate.role link --all                    # Return all matches
+
+# Find by text content
+surf locate.text "Sign In" --action click
+surf locate.text "Accept" --exact --action click
+
+# Find form field by label
+surf locate.label "Username" --action fill --value "john"
+surf locate.label "Password" --action fill --value "secret"
+```
+
+**Actions:** `click`, `fill`, `hover`, `text` (get text content)
+
+## Text Search
+
+```bash
+surf search "login"                    # Find text in page
+surf search "Error" --case-sensitive   # Case-sensitive
+surf search "button" --limit 5         # Limit results
+surf find "login"                      # Alias for search
+```
+
+## Element Inspection
+
+```bash
+surf element.styles e5                 # Get computed styles by ref
+surf element.styles ".card"            # Or by CSS selector
+# Returns: font, color, background, border, padding, bounding box
 ```
 
 ## Scrolling
@@ -166,6 +232,7 @@ surf page.state                # Modals, loading state, scroll info
 surf scroll.bottom
 surf scroll.top  
 surf scroll.to --y 500         # Scroll to Y position
+surf scroll.to --ref e5        # Scroll element into view
 surf scroll.by --y 200         # Scroll by amount
 surf scroll.info               # Get scroll position
 ```
@@ -201,9 +268,14 @@ surf emulate.network reset     # Disable throttling
 surf emulate.cpu 4             # 4x slower
 surf emulate.cpu 1             # Reset
 
-# Device emulation
+# Device emulation (19 presets)
 surf emulate.device "iPhone 14"
+surf emulate.device "Pixel 7"
 surf emulate.device --list     # List available devices
+
+# Custom viewport
+surf emulate.viewport --width 1280 --height 720
+surf emulate.touch --enable    # Enable touch emulation
 
 # Geolocation
 surf emulate.geo --lat 37.7749 --lon -122.4194
@@ -220,6 +292,12 @@ surf form.fill --data '[{"ref":"e1","value":"John"},{"ref":"e2","value":"john@ex
 
 # Checkboxes: true/false
 surf form.fill --data '[{"ref":"e7","value":true}]'
+
+# Dropdown selection
+surf select e5 "Option A"                    # By value (default)
+surf select e5 "Option A" "Option B"         # Multi-select
+surf select e5 --by label "Display Text"     # By visible label
+surf select e5 --by index 2                  # By index (0-based)
 ```
 
 ## File Upload
@@ -229,12 +307,32 @@ surf upload --ref e5 --files "/path/to/file.txt"
 surf upload --ref e5 --files "/path/file1.txt,/path/file2.txt"
 ```
 
+## Iframe Handling
+
+```bash
+surf frame.list                # List frames with IDs
+surf frame.switch "FRAME_ID"   # Switch to iframe context
+surf frame.main                # Return to main frame
+surf frame.js --id "FRAME_ID" --code "return document.title"
+
+# After frame.switch, subsequent commands target that frame:
+surf frame.switch "iframe-1"
+surf page.read                 # Reads iframe content
+surf click e5                  # Clicks in iframe
+surf frame.main                # Back to main page
+```
+
 ## Network Inspection
 
 ```bash
 surf network                   # List captured requests
 surf network --stream          # Real-time network events
+surf network.get --id "req-123"   # Full request details
 surf network.body --id "req-123"  # Get response body
+surf network.curl --id "req-123"  # Generate curl command
+surf network.origins           # List origins with stats
+surf network.stats             # Capture statistics
+surf network.export            # Export all requests
 surf network.clear             # Clear captured requests
 ```
 
@@ -253,13 +351,6 @@ surf js "return document.title"
 surf js "document.querySelector('.btn').click()"
 ```
 
-## Iframe Handling
-
-```bash
-surf frame.list                # List frames with IDs
-surf frame.js --id "FRAME_ID" --code "return document.title"
-```
-
 ## Performance
 
 ```bash
@@ -271,19 +362,29 @@ surf perf.stop                 # Stop and get results
 ## Screenshots
 
 ```bash
-surf screenshot                           # To stdout (base64)
-surf screenshot --output /tmp/shot.png    # Save to file
+surf screenshot                           # Auto-saves to /tmp/surf-snap-*.png
+surf screenshot --output /tmp/shot.png    # Save to specific file
 surf screenshot --selector ".card"        # Element only
 surf screenshot --full-page               # Full page scroll capture
+surf screenshot --no-save                 # Return base64 only, don't save file
+```
+
+## Zoom
+
+```bash
+surf zoom                      # Get current zoom level
+surf zoom 1.5                  # Set zoom to 150%
+surf zoom 1                    # Reset to 100%
 ```
 
 ## Cookies & Storage
 
 ```bash
-surf cookies                   # List cookies for current page
-surf cookies --domain .google.com
+surf cookie.list               # List cookies for current page
+surf cookie.list --domain .google.com
 surf cookie.set --name "token" --value "abc123"
-surf cookie.delete --name "token"
+surf cookie.get --name "token"
+surf cookie.clear              # Clear all cookies
 ```
 
 ## History & Bookmarks
@@ -292,6 +393,7 @@ surf cookie.delete --name "token"
 surf history --query "github" --max 20
 surf bookmarks --query "docs"
 surf bookmark.add --url "https://..." --title "My Bookmark"
+surf bookmark.remove
 ```
 
 ## Health Checks & Smoke Tests
@@ -304,25 +406,86 @@ surf smoke --urls "..." --screenshot /tmp/smoke
 
 ## Workflows
 
-Execute multi-step browser automation as a single command with smart auto-waits:
+Execute multi-step browser automation as a single command with smart auto-waits.
+
+### Inline Workflows
 
 ```bash
-# Inline workflow (pipe-separated)
+# Pipe-separated commands
 surf do 'go "https://example.com" | click e5 | screenshot'
 
 # Multi-step login flow
 surf do 'go "https://example.com/login" | type "user@example.com" --selector "#email" | type "pass" --selector "#password" | click --selector "button[type=submit]"'
 
-# From JSON file
-surf do --file workflow.json
-
 # Validate without executing
 surf do 'go "url" | click e5' --dry-run
 ```
 
-**Why use `do`?** Instead of 6-8 separate CLI calls with LLM orchestration between each, a workflow executes deterministically. Faster, cheaper, and more reliable.
+### Named Workflows
 
-**Options:**
+Save workflows as JSON files in `~/.surf/workflows/` (user) or `./.surf/workflows/` (project):
+
+```bash
+# List available workflows
+surf workflow.list
+
+# Show workflow details
+surf workflow.info my-workflow
+
+# Run by name with arguments
+surf do my-workflow --email "user@example.com" --password "secret"
+
+# Validate workflow file
+surf workflow.validate workflow.json
+```
+
+### Workflow JSON Format
+
+```json
+{
+  "name": "Login Flow",
+  "description": "Automate login process",
+  "args": {
+    "email": { "required": true },
+    "password": { "required": true },
+    "url": { "default": "https://example.com/login" }
+  },
+  "steps": [
+    { "tool": "navigate", "args": { "url": "%{url}" } },
+    { "tool": "type", "args": { "text": "%{email}", "selector": "input[name=email]" } },
+    { "tool": "type", "args": { "text": "%{password}", "selector": "input[name=password]" } },
+    { "tool": "click", "args": { "selector": "button[type=submit]" } },
+    { "tool": "screenshot", "args": {}, "as": "result" }
+  ]
+}
+```
+
+### Loops and Step Outputs
+
+```json
+{
+  "steps": [
+    // Capture step output for later use
+    { "tool": "js", "args": { "code": "return [1,2,3]" }, "as": "items" },
+    
+    // Fixed iterations
+    { "repeat": 5, "steps": [
+      { "tool": "click", "args": { "ref": "e5" } }
+    ]},
+    
+    // Iterate over array
+    { "each": "%{items}", "as": "item", "steps": [
+      { "tool": "js", "args": { "code": "console.log('%{item}')" } }
+    ]},
+    
+    // Repeat until condition
+    { "repeat": 20, "until": { "tool": "js", "args": { "code": "return done" } }, "steps": [...] }
+  ]
+}
+```
+
+### Workflow Options
+
 ```bash
 --file, -f <path>     # Load from JSON file
 --dry-run             # Parse and validate without executing
@@ -337,27 +500,7 @@ surf do 'go "url" | click e5' --dry-run
 - Clicks, key presses, form fills → waits for DOM stability
 - Tab switches → waits for tab to load
 
-**JSON file format:**
-```json
-{
-  "name": "Login Flow",
-  "steps": [
-    { "tool": "navigate", "args": { "url": "https://example.com" } },
-    { "tool": "type", "args": { "text": "user@example.com", "selector": "input[name=email]" } },
-    { "tool": "click", "args": { "selector": "button[type=submit]" } },
-    { "tool": "screenshot", "args": {} }
-  ]
-}
-```
-
-## Script Mode (Legacy)
-
-```bash
-surf --script workflow.json
-surf --script workflow.json --dry-run
-```
-
-Same JSON format as `surf do --file`. The `do` command is preferred as it also supports inline workflows.
+**Why use `do`?** Instead of 6-8 separate CLI calls with LLM orchestration between each, a workflow executes deterministically. Faster, cheaper, and more reliable.
 
 ## Error Diagnostics
 
@@ -371,6 +514,7 @@ surf wait.element ".missing" --auto-capture --timeout 2000
 
 ```bash
 --tab-id <id>         # Target specific tab
+--window-id <id>      # Target specific window
 --json                # Raw JSON output  
 --auto-capture        # Screenshot + console on error
 --timeout <ms>        # Override default timeout
@@ -388,6 +532,9 @@ surf wait.element ".missing" --auto-capture --timeout 2000
 8. **Long timeouts for thinking models** - ChatGPT o1, Grok thinking can take 60+ seconds
 9. **Use `surf do` for multi-step tasks** - Reduces token overhead and improves reliability
 10. **Dry-run workflows first** - `surf do '...' --dry-run` validates without executing
+11. **Window isolation** - Use `window.new` + `--window-id` to keep agent work separate from your browsing
+12. **Semantic locators** - `locate.role`, `locate.text`, `locate.label` for more robust element finding
+13. **Frame context** - Use `frame.switch` before interacting with iframe content
 
 ## Socket API
 

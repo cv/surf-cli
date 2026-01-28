@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.2] - 2026-01-28
+
+### Fixed
+- **CLI version display** - Fixed hardcoded VERSION constant showing "2.0.0" instead of actual version
+
+### Docs
+- **SKILL.md overhaul** - Comprehensive update with all v2.1-2.5 features including semantic locators, workflows with loops/arguments, frame context, window isolation, and more
+
 ## [2.5.1] - 2026-01-28
 
 ### Fixed
