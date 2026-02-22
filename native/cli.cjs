@@ -418,6 +418,35 @@ const TOOLS = {
           { cmd: 'grok --validate --save-models', desc: "Save discovered models to settings" },
         ]
       },
+      "aistudio": {
+        desc: "Query via Google AI Studio (uses browser session)",
+        args: ["query"],
+        opts: {
+          "with-page": "Include current page context",
+          model: "Model (best-effort): pass an AI Studio model id like gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-flash-lite-latest. If invalid, AI Studio uses the last-selected UI model",
+          timeout: "Timeout in seconds (default: 300)"
+        },
+        examples: [
+          { cmd: 'aistudio "explain quantum computing"', desc: "Basic query" },
+          { cmd: 'aistudio "redteam this" --with-page', desc: "With page context" },
+          { cmd: 'aistudio "quick answer" --model gemini-3-flash-preview', desc: "Model selection" },
+        ]
+      },
+      "aistudio.build": {
+        desc: "Build an app via Google AI Studio App Builder (uses browser session)",
+        args: ["query"],
+        opts: {
+          model: "Model override for Advanced Settings (e.g. gemini-3.1-pro-preview)",
+          output: "Directory to extract the downloaded zip",
+          timeout: "Build timeout in seconds (default: 600)",
+          "keep-open": "Keep the AI Studio tab open after completion",
+        },
+        examples: [
+          { cmd: 'aistudio.build "build a portfolio site"', desc: "Build with defaults" },
+          { cmd: 'aistudio.build "todo app with auth" --model gemini-3.1-pro-preview', desc: "Build with model override" },
+          { cmd: 'aistudio.build "crm dashboard" --output ./out', desc: "Build and extract to directory" },
+        ]
+      },
       "ai": { 
         desc: "Analyze page with AI (requires GOOGLE_API_KEY)", 
         args: ["query"], 
@@ -2488,6 +2517,8 @@ const PRIMARY_ARG_MAP = {
   chatgpt: "query",
   perplexity: "query",
   grok: "query",
+  aistudio: "query",
+  "aistudio.build": "query",
   navigate: "url",
   go: "url",
   js: "code",
@@ -2621,6 +2652,9 @@ if (!noScreenshot && AUTO_SCREENSHOT_TOOLS.includes(tool)) {
 
 const outputPath = toolArgs.output;
 delete toolArgs.output;
+if (tool === "aistudio.build" && outputPath) {
+  toolArgs.output = path.resolve(outputPath);
+}
 
 if (tool === "screenshot" && outputPath) {
   if (typeof outputPath !== "string") {
@@ -2854,8 +2888,12 @@ const socket = net.createConnection(SOCKET_PATH, () => {
   socket.write(JSON.stringify(request) + "\n");
 });
 
-const AI_TOOLS = ["smoke", "chatgpt", "gemini", "perplexity", "grok", "ai"];
-const requestTimeout = AI_TOOLS.includes(tool) ? 300000 : 30000;
+const AI_TOOLS = ["smoke", "chatgpt", "gemini", "perplexity", "grok", "aistudio", "aistudio.build", "ai"];
+let requestTimeout = AI_TOOLS.includes(tool) ? 300000 : 30000;
+if (tool === "aistudio.build") {
+  const userTimeoutSec = parseInt(options.timeout || "600", 10);
+  requestTimeout = (userTimeoutSec * 1000) + 60000;
+}
 const timeout = setTimeout(() => {
   console.error(`Error: Request timed out (${requestTimeout / 1000}s)`);
   socket.destroy();
@@ -2937,8 +2975,12 @@ async function handleResponse(response) {
     data = result || response.result;
   }
 
+  if (tool === 'aistudio' && typeof data === 'string') {
+    data = { response: data };
+  }
+
   if (wantJson) {
-    console.log(JSON.stringify(data, null, 2));
+    console.log(JSON.stringify(data ?? null, null, 2));
     socket.end();
     process.exit(0);
   }
@@ -3108,6 +3150,30 @@ async function handleResponse(response) {
       console.log(`\nImage saved: ${data.imagePath}`);
     }
     console.error(`\n[${data.model || 'unknown'} | ${((data.tookMs || 0) / 1000).toFixed(1)}s]`);
+  } else if (tool === "aistudio" && data?.response) {
+    console.log(data.response);
+
+    const meta = [];
+    if (data.model) meta.push(data.model);
+    if (data.thinkingTime) meta.push(`thought ${data.thinkingTime}s`);
+    if (Number.isFinite(data.tookMs)) meta.push(`${(data.tookMs / 1000).toFixed(1)}s`);
+    if (meta.length > 0) {
+      console.error(`\n[${meta.join(' | ')}]`);
+    }
+  } else if (tool === "aistudio.build" && data?.zipPath) {
+    console.error(`Downloaded: ${data.zipPath}`);
+    if (data.extractedPath) {
+      console.error(`Extracted: ${data.extractedPath}`);
+      console.error("");
+    }
+
+    const meta = [];
+    if (data.model) meta.push(data.model);
+    if (Number.isFinite(data.buildDuration)) meta.push(`built ${data.buildDuration}s`);
+    if (Number.isFinite(data.tookMs)) meta.push(`${(data.tookMs / 1000).toFixed(1)}s total`);
+    if (meta.length > 0) {
+      console.error(`[${meta.join(" | ")}]`);
+    }
   } else if (tool === "perplexity" && data?.response) {
     console.log(data.response);
     const meta = [];

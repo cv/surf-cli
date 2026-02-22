@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.6.0] - 2026-02-21
+
+### Added
+- **AI Studio provider** (`surf aistudio`) - Query Gemini models via aistudio.google.com using your browser session. Supports `--model` for best-effort model selection and `--with-page` to include current page context. Extracts responses from both DOM and network (GenerateContent RPC), with thinking-model support. (co-authored by @w-winter)
+- **AI Studio App Builder** (`surf aistudio.build`) - Automate AI Studio's App Builder to generate web apps from a text prompt. Downloads the result as a zip file and optionally extracts it to `--output`. Supports `--model`, `--timeout`, and `--keep-open`.
+- **Windows support** - Named pipes for socket paths, `SURF_TMP` for temp files, ImageMagick quoting fixes, skip Unix-only `unlinkSync`/`chmodSync`. (@marcfargas)
+- **Helium browser support** - Detect and connect to Helium browser alongside Chrome. (@aliou)
+- **Env var overrides** - `SURF_SOCKET_PATH`, `SURF_HOST_PATH`, and `SURF_MANIFEST_PATH` for package manager installs. (@aliou)
+- **Skills in npm package** - Skills directory now included in published package. (@aliou)
+
+### Fixed
+- **CLI --version** - Read version dynamically from `package.json` instead of a hardcoded constant. (@davidguttman)
+
+### Dependencies
+- Bump `vite-plugin-node-polyfills` from 0.24.0 to 0.25.0
+
 ## [2.5.2] - 2026-01-28
 
 ### Fixed

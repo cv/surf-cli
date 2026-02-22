@@ -10,6 +10,8 @@ const chatgptClient = require("./chatgpt-client.cjs");
 const geminiClient = require("./gemini-client.cjs");
 const perplexityClient = require("./perplexity-client.cjs");
 const grokClient = require("./grok-client.cjs");
+const aistudioClient = require("./aistudio-client.cjs");
+const aistudioBuild = require("./aistudio-build.cjs");
 const { mapToolToMessage, mapComputerAction, formatToolContent } = require("./host-helpers.cjs");
 
 const IS_WIN = process.platform === "win32";
@@ -910,6 +912,198 @@ function handleToolRequest(msg, socket) {
       sendToolResponse(socket, originalId, null, err.message);
     });
     
+    return;
+  }
+
+  if (extensionMsg.type === "AISTUDIO_QUERY") {
+    const { query, model, withPage, timeout } = extensionMsg;
+    
+    queueAiRequest(async () => {
+      const EXT_CALL_TIMEOUT_MS = 30000;
+
+      const callExtension = (toolName, msg, timeoutMs = EXT_CALL_TIMEOUT_MS) => new Promise((resolve, reject) => {
+        const id = ++requestCounter;
+
+        if (msg && msg.type === "AISTUDIO_NEW_TAB") {
+          log(`[aistudio] Opening tab: ${(msg.url || "https://aistudio.google.com/prompts/new_chat")}`);
+        }
+
+        const timeoutId = setTimeout(() => {
+          pendingToolRequests.delete(id);
+          reject(new Error(`Timeout waiting for extension: ${toolName}`));
+        }, timeoutMs);
+
+        pendingToolRequests.set(id, {
+          socket: null,
+          originalId: null,
+          tool: toolName,
+          onComplete: (r) => {
+            clearTimeout(timeoutId);
+            resolve(r);
+          }
+        });
+
+        writeMessage({ ...msg, id });
+      });
+
+      // 1. Get page context if requested
+      let pageContext = null;
+      if (withPage) {
+        const pageResult = await callExtension(
+          "get_page_text",
+          { type: "GET_PAGE_TEXT", tabId: extensionMsg.tabId },
+          45000
+        );
+
+        if (pageResult && !pageResult.error) {
+          pageContext = {
+            url: pageResult.url,
+            text: pageResult.text || pageResult.pageContent || ""
+          };
+        }
+      }
+
+      // 2. Build full prompt
+      let fullPrompt = query || "";
+      if (pageContext) {
+        const MAX_PAGE_CONTEXT_CHARS = 20000;
+        const pageText = String(pageContext.text || "");
+        const truncated = pageText.length > MAX_PAGE_CONTEXT_CHARS
+          ? pageText.slice(0, MAX_PAGE_CONTEXT_CHARS) + "\n\n[...truncated...]"
+          : pageText;
+
+        fullPrompt = `Page: ${pageContext.url}\n\n${truncated}\n\n---\n\n${fullPrompt}`;
+      }
+
+      // 3. Call AI Studio client
+      const result = await aistudioClient.query({
+        prompt: fullPrompt,
+        model: model || undefined,
+        timeout: timeout || 300000,
+        getCookies: () => callExtension("get_cookies", { type: "GET_GOOGLE_COOKIES" }, 45000),
+        createTab: (url) => callExtension(
+          "create_tab",
+          { type: "AISTUDIO_NEW_TAB", url },
+          45000
+        ),
+        closeTab: (tabIdToClose) => callExtension(
+          "close_tab",
+          { type: "AISTUDIO_CLOSE_TAB", tabId: tabIdToClose },
+          45000
+        ),
+        cdpEvaluate: (tabId, expression) => callExtension(
+          "cdp_evaluate",
+          { type: "AISTUDIO_EVALUATE", tabId, expression }
+        ),
+        cdpCommand: (tabId, method, params) => callExtension(
+          "cdp_command",
+          { type: "AISTUDIO_CDP_COMMAND", tabId, method, params }
+        ),
+        readNetworkEntries: (tabIdToRead) => callExtension(
+          "read_network_entries",
+          {
+            type: "READ_NETWORK_REQUESTS",
+            tabId: tabIdToRead,
+            full: true,
+            limit: 100,
+            urlPattern: "MakerSuiteService/GenerateContent"
+          },
+          45000
+        ),
+        log: (msg) => log(`[aistudio] ${msg}`)
+      });
+
+      return result;
+    }).then((result) => {
+      const payload = {
+        response: result.response,
+        model: result.model,
+        thinkingTime: result.thinkingTime,
+        tookMs: result.tookMs
+      };
+
+      sendToolResponse(socket, originalId, { output: JSON.stringify(payload) }, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+    
+    return;
+  }
+
+  if (extensionMsg.type === "AISTUDIO_BUILD") {
+    const { query, model, output, keepOpen, timeout } = extensionMsg;
+
+    queueAiRequest(async () => {
+      const EXT_CALL_TIMEOUT_MS = 30000;
+
+      const callExtension = (toolName, msg, timeoutMs = EXT_CALL_TIMEOUT_MS) => new Promise((resolve, reject) => {
+        const id = ++requestCounter;
+
+        if (msg && msg.type === "AISTUDIO_NEW_TAB") {
+          log(`[aistudio] Opening tab: ${(msg.url || "https://aistudio.google.com/apps")}`);
+        }
+
+        const timeoutId = setTimeout(() => {
+          pendingToolRequests.delete(id);
+          reject(new Error(`Timeout waiting for extension: ${toolName}`));
+        }, timeoutMs);
+
+        pendingToolRequests.set(id, {
+          socket: null,
+          originalId: null,
+          tool: toolName,
+          onComplete: (r) => {
+            clearTimeout(timeoutId);
+            resolve(r);
+          }
+        });
+
+        writeMessage({ ...msg, id });
+      });
+
+      const result = await aistudioBuild.build({
+        prompt: query,
+        model: model || undefined,
+        output,
+        keepOpen,
+        timeout: timeout || 600000,
+        getCookies: () => callExtension("get_cookies", { type: "GET_GOOGLE_COOKIES" }, 45000),
+        createTab: (url) => callExtension(
+          "create_tab",
+          { type: "AISTUDIO_NEW_TAB", url },
+          45000
+        ),
+        closeTab: (tabIdToClose) => callExtension(
+          "close_tab",
+          { type: "AISTUDIO_CLOSE_TAB", tabId: tabIdToClose },
+          45000
+        ),
+        cdpEvaluate: (tabId, expression) => callExtension(
+          "cdp_evaluate",
+          { type: "AISTUDIO_EVALUATE", tabId, expression }
+        ),
+        cdpCommand: (tabId, method, params) => callExtension(
+          "cdp_command",
+          { type: "AISTUDIO_CDP_COMMAND", tabId, method, params }
+        ),
+        searchDownloads: async (params) => {
+          const result = await callExtension(
+            "downloads_search",
+            { type: "DOWNLOADS_SEARCH", searchParams: params },
+            10000
+          );
+          return result?.downloads || [];
+        },
+        log: (msg) => log(`[aistudio:build] ${msg}`)
+      });
+
+      return result;
+    }).then((result) => {
+      sendToolResponse(socket, originalId, { output: JSON.stringify(result) }, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+
     return;
   }
   
