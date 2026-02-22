@@ -8,10 +8,10 @@ To use the surf skill with [Pi coding agent](https://github.com/badlogic/pi-mono
 
 ```bash
 # Option 1: Symlink (auto-updates)
-ln -s "$(pwd)/skills/surf" ~/.pi/agent/skills/surf
+ln -s "$(pwd)/skills/surf" ~/.agents/skills/surf
 
 # Option 2: Copy
-cp -r skills/surf ~/.pi/agent/skills/
+cp -r skills/surf ~/.agents/skills/
 ```
 
 The skill will be available when pi detects browser automation tasks.
